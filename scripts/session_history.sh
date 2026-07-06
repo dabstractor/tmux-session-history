@@ -31,7 +31,9 @@
 #     the cursor, append the new session (deduped) -> end of road, forward dead.
 #
 # Global state, single-client assumption. Maintained reactively by hooks; no
-# probing session switches. Subcommands take the invoking session as $1.
+# probing session switches. session-closed prunes dead entries; session-created
+# also caps the timeline to the number of open sessions. Subcommands take the
+# invoking session as $1.
 
 set -u
 
@@ -219,6 +221,34 @@ prune_dead() {
     [ -n "$PREV" ] && { session_exists "$PREV" || PREV=""; }
 }
 
+# --- cap + maintenance (wired to session-created) ----------------------------
+# Ceiling = number of sessions currently open. Because the timeline is
+# duplicate-free and dead sessions are pruned, |HIST| is already <= the open
+# count in practice; this trims any oldest stragglers that slip through, never
+# dropping the live current session.
+live_session_count() {
+    tmux list-sessions -F '#{session_name}' 2>/dev/null | wc -l
+}
+
+cap_to_live() {
+    local cap; cap="$(live_session_count)"; [ -z "$cap" ] && cap=0
+    while [ "${#HIST[@]}" -gt "$cap" ]; do
+        [ "${HIST[0]}" = "$CURRENT" ] && break        # never drop the current session
+        HIST=("${HIST[@]:1}")                          # drop oldest (index 0)
+        [ "$IDX" -gt 0 ] && IDX=$(( IDX - 1 ))
+    done
+}
+
+# session-created: prune any dead entries, then cap to the open-session count.
+# (Deletion is already covered by session-closed -> prune; this catches anything
+# missed and enforces the ceiling whenever a session is added.)
+do_maintain() {
+    load
+    prune_dead
+    cap_to_live
+    save
+}
+
 # --- init / status / reset ---------------------------------------------------
 do_init() {
     load
@@ -248,11 +278,12 @@ case "$cmd" in
     init)    do_init ;;
     hook)    load; do_hook "$to" ;;
     prune)   load; prune_dead; save ;;
+    maintain) do_maintain ;;
     toggle)  do_toggle "$to" ;;
     back)    do_back "$to" ;;
     forward) do_forward "$to" ;;
     pick)    do_pick "$to" ;;
     status)  do_status ;;
     reset)   do_reset ;;
-    *) echo "Usage: $0 {init|hook|prune|toggle|back|forward|pick|status|reset} [session]" >&2; exit 1 ;;
+    *) echo "Usage: $0 {init|hook|prune|maintain|toggle|back|forward|pick|status|reset} [session]" >&2; exit 1 ;;
 esac

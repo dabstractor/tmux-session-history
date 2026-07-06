@@ -45,19 +45,22 @@ run-shell ~/.tmux/plugins/tmux-session-history/session_history.tmux
 
 ## Keys
 
-Defaults, all under the prefix:
+Only toggle is bound by default. Bind the others to whatever you want, all
+under the prefix:
 
-| Action | Key | Change with |
+| Action | Default | Change with |
 |---|---|---|
 | Toggle to previous session | `L` | `@session-history-toggle-key` |
-| Back | `C-F9` | `@session-history-back-key` |
-| Forward | `C-F10` | `@session-history-forward-key` |
+| Back | unbound | `@session-history-back-key` |
+| Forward | unbound | `@session-history-forward-key` |
 | Pick from history | unbound | `@session-history-pick-key` |
 
-Enable pick:
+For example:
 
 ```tmux
-set -g @session-history-pick-key 'C-S-l'
+set -g @session-history-back-key    'C-F9'
+set -g @session-history-forward-key 'C-F10'
+set -g @session-history-pick-key    'C-S-l'   # pick is opt-in (needs fzf)
 ```
 
 Set any key option to an empty string to leave that action unbound.
@@ -67,8 +70,8 @@ Set any key option to an empty string to leave that action unbound.
 | Option | Default | Purpose |
 |---|---|---|
 | `@session-history-toggle-key` | `L` | Key bound to toggle. |
-| `@session-history-back-key` | `C-F9` | Key bound to back. |
-| `@session-history-forward-key` | `C-F10` | Key bound to forward. |
+| `@session-history-back-key` | (empty) | Key bound to back. Empty leaves it unbound. |
+| `@session-history-forward-key` | (empty) | Key bound to forward. Empty leaves it unbound. |
 | `@session-history-pick-key` | (empty) | Key bound to pick. Empty leaves it unbound. |
 | `@session-history-popup` | `on` | Use an fzf-tmux popup for pick. Set `off` for inline fzf. |
 
@@ -83,6 +86,12 @@ jump, until you walk back again.
 
 The plugin composes with tmux-sessionx and other pickers. Switches made through
 them count as new navigation points, the same as a manual switch.
+
+The timeline is capped at the number of sessions currently open. When a session
+is closed, `session-closed` prunes it from history; when one is created,
+`session-created` prunes any dead entries and trims the timeline down to the
+open-session count, so history never references sessions that no longer exist
+and never grows past the number open.
 
 ## Requirements
 

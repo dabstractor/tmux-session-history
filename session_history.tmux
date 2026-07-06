@@ -18,20 +18,26 @@ get_tmux_option() {
 # --- reactive engine wiring ---------------------------------------------------
 # client-session-changed is the spine: every switch flows through it, which is
 # how we tell WALKS (back/forward) from NAVIGATIONS (toggle/pick/sessionx/manual).
-# session-closed prunes dead entries so the timeline never dangles.
+# session-closed prunes dead entries; session-created re-prunes and caps the
+# timeline to the number of open sessions, so history never outlives sessions.
 tmux set-hook -g client-session-changed "run-shell '${SCRIPT} hook \"#{session_name}\"'"
 tmux set-hook -g session-closed         "run-shell -b '${SCRIPT} prune \"#{session_name}\"'"
+tmux set-hook -g session-created        "run-shell -b '${SCRIPT} maintain'"
 tmux run-shell "${SCRIPT} init"
 
 # --- key bindings (all overridable) -------------------------------------------
+# Only toggle is bound by default (L). back/forward/pick ship unbound so users
+# wire the keys they want in their tmux.conf via the options below. An empty
+# option value leaves that key unbound.
 toggle_key="$(get_tmux_option  '@session-history-toggle-key'  'L')"
-back_key="$(get_tmux_option    '@session-history-back-key'    'C-F9')"
-forward_key="$(get_tmux_option '@session-history-forward-key' 'C-F10')"
+back_key="$(get_tmux_option    '@session-history-back-key'    '')"
+forward_key="$(get_tmux_option '@session-history-forward-key' '')"
 pick_key="$(get_tmux_option    '@session-history-pick-key'    '')"
-
-# pick is opt-in (needs fzf); the other three are bound by default. An empty
-# option value leaves the key unbound so users can disable any of them.
 [ -n "$toggle_key" ]  && tmux bind-key "$toggle_key"  run-shell "${SCRIPT} toggle  \"#{session_name}\""
 [ -n "$back_key" ]    && tmux bind-key "$back_key"    run-shell "${SCRIPT} back    \"#{session_name}\""
 [ -n "$forward_key" ] && tmux bind-key "$forward_key" run-shell "${SCRIPT} forward \"#{session_name}\""
 [ -n "$pick_key" ]    && tmux bind-key "$pick_key"    run-shell "${SCRIPT} pick    \"#{session_name}\""
+
+# The bind lines above short-circuit to false (exit 1) when their key is empty;
+# end on a no-op so plugin load always reports success.
+:
