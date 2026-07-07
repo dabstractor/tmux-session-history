@@ -43,33 +43,41 @@ git clone https://github.com/dabstractor/tmux-session-history ~/.tmux/plugins/tm
 run-shell ~/.tmux/plugins/tmux-session-history/session_history.tmux
 ```
 
+Toggle works out of the box on `prefix + L`. Set back/forward in [Keys](#keys)
+for history walking.
+
 ## Keys
 
-Only toggle is bound by default. Bind the others to whatever you want, all
-under the prefix:
+Toggle ships on `prefix + L` — tmux's own "previous session" key
+(`switch-client -l`) — but the plugin's version self-heals: if the session you'd
+flip to was deleted, it falls back to the nearest live one instead of failing
+silently. So out of the box, `prefix + L` just works and is strictly better than
+the stock binding.
 
-| Action | Default | Change with |
-|---|---|---|
-| Toggle to previous session | `L` | `@session-history-toggle-key` |
-| Back | unbound | `@session-history-back-key` |
-| Forward | unbound | `@session-history-forward-key` |
-| Pick from history | unbound | `@session-history-pick-key` |
-
-For example:
+Back, forward, and pick have no good universal default, so they're unbound until
+you set them:
 
 ```tmux
-set -g @session-history-back-key    'C-F9'
-set -g @session-history-forward-key 'C-F10'
-set -g @session-history-pick-key    'C-S-l'   # pick is opt-in (needs fzf)
+set -g @session-history-back-key    'C-F9'    # walk toward older sessions
+set -g @session-history-forward-key 'C-F10'   # walk toward newer sessions
+# set -g @session-history-pick-key  'C-S-l'   # optional: fzf picker (needs fzf)
 ```
 
-Set any key option to an empty string to leave that action unbound.
+| Action | Default | Option | What it does |
+|---|---|---|---|
+| Toggle | `L` | `@session-history-toggle-key` | flip to the previous session (self-healing) |
+| Back | unbound | `@session-history-back-key` | walk toward older entries |
+| Forward | unbound | `@session-history-forward-key` | walk toward newer entries |
+| Pick | unbound | `@session-history-pick-key` | fzf picker over live history (opt-in, needs fzf) |
+
+Set any key to an empty string to leave it unbound. (Set toggle to `''` if you'd
+rather keep tmux's stock `switch-client -l`.)
 
 ## Options
 
 | Option | Default | Purpose |
 |---|---|---|
-| `@session-history-toggle-key` | `L` | Key bound to toggle. |
+| `@session-history-toggle-key` | `L` | Key bound to toggle. `L` is tmux's stock "previous session" key (switch-client -l); the plugin's version self-heals. Empty leaves it unbound. |
 | `@session-history-back-key` | (empty) | Key bound to back. Empty leaves it unbound. |
 | `@session-history-forward-key` | (empty) | Key bound to forward. Empty leaves it unbound. |
 | `@session-history-pick-key` | (empty) | Key bound to pick. Empty leaves it unbound. |

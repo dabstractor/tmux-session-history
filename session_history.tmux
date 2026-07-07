@@ -29,9 +29,12 @@ tmux set-hook -g session-created        "run-shell '${SCRIPT} maintain'"
 tmux run-shell "${SCRIPT} init"
 
 # --- key bindings (all overridable) -------------------------------------------
-# Only toggle is bound by default (L). back/forward/pick ship unbound so users
-# wire the keys they want in their tmux.conf via the options below. An empty
-# option value leaves that key unbound.
+# Toggle defaults to L: prefix+L is tmux's own "previous session" key
+# (switch-client -l). We hijack it because the plugin's toggle is a strictly
+# better version of the same primitive -- it self-heals when the target session
+# was deleted, instead of failing silently like switch-client -l. back/forward/
+# pick ship unbound (no universally free, mnemonic pair worth hardcoding), so
+# users set those themselves. An empty option value leaves that key unbound.
 toggle_key="$(get_tmux_option  '@session-history-toggle-key'  'L')"
 back_key="$(get_tmux_option    '@session-history-back-key'    '')"
 forward_key="$(get_tmux_option '@session-history-forward-key' '')"
