@@ -15,14 +15,17 @@ get_tmux_option() {
     [ -n "$value" ] && echo "$value" || echo "$2"
 }
 
-# --- reactive engine wiring ---------------------------------------------------
+# All three hooks run SYNCHRONOUSLY (no -b). Each does a read-modify-write on the
+# @session-history-* options, so an async (-b) hook would race the navigation
+# hook and clobber current/prev/idx via a lost update, corrupting toggle.
+# Synchronous hooks serialize through tmux's command loop -> no lost updates.
 # client-session-changed is the spine: every switch flows through it, which is
 # how we tell WALKS (back/forward) from NAVIGATIONS (toggle/pick/sessionx/manual).
 # session-closed prunes dead entries; session-created re-prunes and caps the
 # timeline to the number of open sessions, so history never outlives sessions.
 tmux set-hook -g client-session-changed "run-shell '${SCRIPT} hook \"#{session_name}\"'"
-tmux set-hook -g session-closed         "run-shell -b '${SCRIPT} prune \"#{session_name}\"'"
-tmux set-hook -g session-created        "run-shell -b '${SCRIPT} maintain'"
+tmux set-hook -g session-closed         "run-shell '${SCRIPT} prune \"#{session_name}\"'"
+tmux set-hook -g session-created        "run-shell '${SCRIPT} maintain'"
 tmux run-shell "${SCRIPT} init"
 
 # --- key bindings (all overridable) -------------------------------------------
