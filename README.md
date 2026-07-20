@@ -125,15 +125,16 @@ instant you produce output in a walked-to session, activity promotes it
 immediately, so the dwell timer never gets in the way of active use. Press
 toggle again and you're back on B (once B itself is relevant).
 
-**How activity detection works.** When toggle is bound the plugin turns on
-`focus-events` and keeps a `pipe-pane` on the single focused pane. The pane's
+**How activity detection works.** When toggle is bound the plugin runs a small
+background poller that keeps a `pipe-pane` on your focused pane. The pane's
 output stream — which includes both program output and the terminal's echo of
-your keystrokes — feeds a small throttled reader that promotes the pane's
-session at most once per second. Only the focused pane is ever piped (one
+your keystrokes — feeds a throttled reader that promotes the pane's session at
+most once per second. The poller re-reads the attached client's active pane
+twice a second and re-pipes to follow it, so it works no matter how you navigate
+(session, window, or pane switches). Only the focused pane is ever piped (one
 resident reader), so output in sessions you're *not* viewing can never promote
-them. The pipe follows focus automatically (it re-pipes on every session,
-window, and pane switch), so it works no matter how you navigate. With toggle
-unbound none of this is wired — no pipes, no resident readers.
+them. With toggle unbound the poller is never started — no pipes, no resident
+processes.
 
 The dwell timer is one asynchronous path; focused-activity detection is the
 other. Both touch only the relevance list (never the timeline), so a rare lost

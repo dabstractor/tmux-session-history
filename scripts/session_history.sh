@@ -76,11 +76,13 @@
 #       once per second of output; it self-guards against the LIVE attached
 #       session (not @current — see do_activity), so a reader on a pane that is
 #       no longer the focused one is a clean no-op.
-#   The pipe itself is managed by a synchronous pane-focus-in hook (`focusin`):
-#   exactly one pane — the focused one — is piped at any time. focusin closes the
-#   previously-tracked pane's pipe before opening the new one, tracked in the
-#   best-effort @session-history-piped-pane option (the activity guard makes any
-#   stray pipe harmless). See the ACTIVITY DETECTION section below.
+#   The pipe itself is driven by a single background poller (do_poller): it
+#   re-evaluates the attached client's active pane ~twice a second and re-pipes to
+#   follow it (pane-focus-in proved unreliable — it misses intra-session pane/window
+#   switches). Exactly one pane — the focused one — is piped at any time; the
+#   best-effort @session-history-piped-pane tracks it, and the activity guard
+#   (against the live client session) makes any stray pipe harmless. The poller
+#   self-terminates when toggle is off. See the ACTIVITY DETECTION section below.
 #
 # Global state, single-client assumption. Subcommands take the invoking session
 # as $1.
@@ -236,21 +238,19 @@ do_dwell() {
 # --- activity promoter (async; touches ONLY the relevance list) --------------
 # Fired by the focused-pane pipe reader (do_pipereader), at most once per second
 # of focused-pane output. Like do_dwell it read-modify-writes ONLY
-# @session-history-tlist, but its guard is different and deliberate: it checks
-# the LIVE attached session (`tmux display-message -p '#{session_name}'`), NOT
-# the engine's @current. Reason: pane-focus-in can fire BEFORE
-# client-session-changed on a switch, so @current still holds the previous
-# session at that instant — a guard on @current would wrongly skip a legitimate
-# focus-time fire. The live attached session is updated by tmux before any hook
-# runs, so it is correct even mid-switch. This also cleanly drops fires from any
-# pipe left on a non-focused (background) pane: its session != the attached
-# session => no-op, so a stray/leaked pipe can never promote a background session.
+# @session-history-tlist. Its guard checks the LIVE attached client's session via
+# `tmux list-clients` — NOT `display-message` with no target (which, from a
+# pipe-pane child process with no client context, can return an unrelated
+# session), and NOT the engine's @current (which lags). A background poller keeps
+# the pipe on the active pane of exactly that client's session, so a matching
+# fire promotes it; any stray/leaked pipe on another pane has session != the
+# client's => clean no-op.
 do_activity() {
     local s="$1"
     toggle_enabled || return 0
     session_exists "$s" || return 0
-    local attached; attached="$(tmux display-message -p '#{session_name}' 2>/dev/null)"
-    [ "$s" = "$attached" ] || return 0
+    local attached; attached="$(tmux list-clients -F '#{client_session}' 2>/dev/null | head -n1)"
+    [ -n "$attached" ] && [ "$s" = "$attached" ] || return 0
     local raw arr=() nh=() i
     raw="$(G "$(H tlist)")"
     [ -n "$raw" ] && while IFS= read -r line; do [ -n "$line" ] && arr+=("$line"); done <<< "$raw"
@@ -273,9 +273,14 @@ do_activity() {
 # still fires. Only the focused pane is ever piped (one resident reader), so
 # background output can never promote a session.
 #
-# focusin re-pipes on every focus change. pane-focus-in fires for the active pane
-# on session/window/pane switches (needs focus-events on, which the entry point
-# enables with toggle) and on client attach, so it follows focus AND bootstraps.
+# The pipe FOLLOWS FOCUS via a background poller (do_poller), not a hook: tmux's
+# pane-focus-in fires on session switches but NOT on pane/window switches within
+# a session (and not reliably from every client), so it cannot be trusted to keep
+# the pipe on the pane the user is actually typing in. The poller instead reads
+# the attached client's ACTIVE pane (via list-clients + display-message -t, which
+# always reflects the genuine client view regardless of who invoked the command)
+# roughly twice a second and re-pipes to follow it. One resident poller + one
+# resident reader; both self-terminate when toggle is off.
 #
 # do_pipereader: stdin = the focused pane's output stream. Read it continuously;
 # at most once per wall-clock second, look up the pane's session and promote it
@@ -308,12 +313,47 @@ do_focusin() {
     S "$(H piped-pane)" "$pane"
 }
 
-# do_unfocus: drop the pipe on detach/shutdown. The activity guard already makes
-# a stray pipe harmless; this is hygiene (no resident reader once detached).
+# do_unfocus: drop the pipe (no client / shutdown). The activity guard already
+# makes a stray pipe harmless; this is hygiene (no resident reader once idle).
 do_unfocus() {
     local old; old="$(G "$(H piped-pane)")"
     [ -n "$old" ] && tmux pipe-pane -t "$old" "" 2>/dev/null
     S "$(H piped-pane)" ""
+}
+
+# --- focused-pane pipe follower (background poller) --------------------------
+# Drives do_focusin: re-evaluates the attached client's ACTIVE pane ~twice a
+# second and re-pipes to follow it (session, window, AND pane switches). Exits on
+# its own once toggle is disabled, and records its PID so a plugin reload can
+# kill the previous instance (see do_start_poller).
+do_poller() {
+    S "$(H poller-pid)" "$$"
+    while toggle_enabled; do
+        local sess pane cur
+        sess="$(tmux list-clients -F '#{client_session}' 2>/dev/null | head -n1)"
+        cur="$(G "$(H piped-pane)")"
+        if [ -z "$sess" ]; then
+            [ -n "$cur" ] && do_unfocus              # no client attached: drop pipe
+        else
+            pane="$(tmux display-message -t "$sess" -p '#{pane_id}' 2>/dev/null)"
+            if [ -n "$pane" ] && [ "$pane" != "$cur" ]; then
+                do_focusin "$pane"
+            fi
+        fi
+        sleep 0.5
+    done
+    do_unfocus
+    S "$(H poller-pid)" ""
+}
+
+# Start (or restart) the poller. Kills any previous instance first so reloading
+# the plugin never stacks pollers. No-op unless toggle is enabled; also no-op
+# without tmux (e.g. running the script by hand for status/reset).
+do_start_poller() {
+    toggle_enabled || return 0
+    local old; old="$(G "$(H poller-pid)")"
+    [ -n "$old" ] && kill "$old" 2>/dev/null
+    tmux run-shell -b "${SELF} poller"
 }
 
 # --- toggle: flip to the other most-relevant session -------------------------
@@ -466,13 +506,11 @@ do_init() {
         [ -z "$s" ] && s="$(tmux list-sessions -F '#{session_created} #{session_name}' 2>/dev/null | sort -rn | head -n1 | cut -d ' ' -f2-)"
         [ -n "$s" ] && { HIST=("$s"); IDX=0; CURRENT="$s"; save; }
     fi
-    # bootstrap focused-activity detection on the current pane (pane-focus-in
-    # keeps it following focus afterwards). Only when a client is actually
-    # attached — display-message defaults to the most-recent session even with
-    # no client, and we don't want a resident reader with nobody viewing.
-    if toggle_enabled && [ -n "$(tmux list-clients -F x 2>/dev/null | head -1)" ]; then
-        local pane; pane="$(tmux display-message -p '#{pane_id}' 2>/dev/null)" && do_focusin "$pane"
-    fi
+    # Start the focused-activity poller: it opens the pipe on the client's active
+    # pane and re-pipes to follow focus (session/window/pane switches). Reload-
+    # safe — do_start_poller kills any previous instance first. No-op without a
+    # client (the poller waits for one to attach).
+    do_start_poller
 }
 
 do_status() {
@@ -506,6 +544,7 @@ case "$cmd" in
     pipereader) do_pipereader "$to" ;;
     focusin)   do_focusin "$to" ;;
     unfocus)   do_unfocus ;;
+    poller)    do_poller ;;
     prune)     load; prune_dead; save ;;
     maintain)  do_maintain ;;
     toggle)    do_toggle "$to" ;;
