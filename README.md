@@ -1,8 +1,9 @@
 # tmux-session-history
 
-Browser-style back and forward, an Alt-Tab style toggle, and an fzf picker for
-moving between tmux sessions. The plugin keeps one duplicate-free timeline of
-the sessions you have visited and moves a cursor through it.
+Browser-style back and forward, an Alt-Tab style toggle that flips between the
+two sessions you're *actually using*, and an fzf picker for moving between tmux
+sessions. The plugin keeps one duplicate-free timeline of the sessions you have
+visited and moves a cursor through it.
 
 ## Why
 
@@ -10,13 +11,16 @@ tmux's `switch-client -l` flips to the last session, but it fails silently when
 that session no longer exists, and it has no concept of forward. Session
 pickers such as tmux-sessionx jump to any session, but every jump is a fresh
 start with no back button. This plugin gives session switching a real history
-cursor.
+cursor — and a toggle that targets the sessions you're working in, not just the
+ones you most recently clicked past.
 
 ## Features
 
-- **Toggle** flips to the session you were just in, Alt-Tab style. If that
-  session was closed, it falls back to the nearest live session instead of
-  breaking.
+- **Toggle** flips to the other session you're *actively using*, Alt-Tab style.
+  It tracks relevance, not recency: walking past a session with back/forward
+  never makes it a toggle target — you have to select it or stay on it. If the
+  target was closed, it self-heals to the nearest live relevant session instead
+  of breaking.
 - **Back** moves toward older entries in the timeline.
 - **Forward** moves toward newer entries. It does nothing at the tip, like a
   browser.
@@ -43,63 +47,93 @@ git clone https://github.com/dabstractor/tmux-session-history ~/.tmux/plugins/tm
 run-shell ~/.tmux/plugins/tmux-session-history/session_history.tmux
 ```
 
-Toggle works out of the box on `prefix + L`. Set back/forward in [Keys](#keys)
-for history walking.
+**Nothing is bound by default.** Pick the keys you want (see [Keys](#keys)).
 
 ## Keys
 
-Toggle ships on `prefix + L` — tmux's own "previous session" key
-(`switch-client -l`) — but the plugin's version self-heals: if the session you'd
-flip to was deleted, it falls back to the nearest live one instead of failing
-silently. So out of the box, `prefix + L` just works and is strictly better than
-the stock binding.
-
-Back, forward, and pick have no good universal default, so they're unbound until
-you set them:
+All four actions ship **unbound**. There is no universally free, mnemonic key
+worth hardcoding for any of them, so each is opt-in:
 
 ```tmux
-set -g @session-history-back-key    'C-F9'    # walk toward older sessions
-set -g @session-history-forward-key 'C-F10'   # walk toward newer sessions
-# set -g @session-history-pick-key  'C-S-l'   # optional: fzf picker (needs fzf)
+set -g @session-history-toggle-key  'M-Space'   # Alt-Tab style flip
+set -g @session-history-back-key    'C-F9'      # walk toward older sessions
+set -g @session-history-forward-key 'C-F10'     # walk toward newer sessions
+# set -g @session-history-pick-key  'C-S-l'     # optional: fzf picker (needs fzf)
 ```
 
 | Action | Default | Option | What it does |
 |---|---|---|---|
-| Toggle | `L` | `@session-history-toggle-key` | flip to the previous session (self-healing) |
+| Toggle | unbound | `@session-history-toggle-key` | flip to the other most-*relevant* session (self-healing) |
 | Back | unbound | `@session-history-back-key` | walk toward older entries |
 | Forward | unbound | `@session-history-forward-key` | walk toward newer entries |
 | Pick | unbound | `@session-history-pick-key` | fzf picker over live history (opt-in, needs fzf) |
 
-Set any key to an empty string to leave it unbound. (Set toggle to `''` if you'd
-rather keep tmux's stock `switch-client -l`.)
+Set any key to an empty string (or leave it unset) to leave it unbound.
+
+> **Toggle is load-bearing opt-in.** None of the relevance machinery — the
+> relevance list, the dwell timers — is wired unless `@session-history-toggle-key`
+> is set. The moment you bind it, the engine starts tracking relevance; with it
+> unbound, the plugin only runs the lightweight history engine for back/forward/pick.
 
 ## Options
 
 | Option | Default | Purpose |
 |---|---|---|
-| `@session-history-toggle-key` | `L` | Key bound to toggle. `L` is tmux's stock "previous session" key (switch-client -l); the plugin's version self-heals. Empty leaves it unbound. |
+| `@session-history-toggle-key` | (empty) | Key bound to toggle. Empty leaves it unbound and disables the whole relevance feature. |
 | `@session-history-back-key` | (empty) | Key bound to back. Empty leaves it unbound. |
 | `@session-history-forward-key` | (empty) | Key bound to forward. Empty leaves it unbound. |
 | `@session-history-pick-key` | (empty) | Key bound to pick. Empty leaves it unbound. |
+| `@session-history-dwell-ms` | `30000` | How long you must stay on a session you *walked* to (back/forward) before it counts as relevant. `0` disables dwell (relevance then comes only from selecting a session). |
 | `@session-history-popup` | `on` | Use an fzf-tmux popup for pick. Set `off` for inline fzf. |
 
 ## How it works
 
-Every session switch fires `client-session-changed`. Back and forward set a
-flag naming their target before they switch, so the hook moves the cursor
-without touching the timeline. Any other switch (toggle, pick, tmux-sessionx,
-or a manual `switch-client`) carries no flag, so the hook drops forward history
-and appends the new session at the tip. That is why forward is dead after a
-jump, until you walk back again.
+There are two independent pieces of state:
+
+**The timeline** (always on, for back/forward). Every session switch fires
+`client-session-changed`. Back and forward set a flag naming their target
+before they switch, so the hook moves the cursor without touching the timeline.
+Any other switch (pick, tmux-sessionx, a manual `switch-client`) carries no
+flag, so the hook drops forward history and appends the new session at the tip.
+That is why forward is dead after a jump, until you walk back again — strict
+browser semantics.
+
+**The relevance list** (only when toggle is bound). This is a second, separate
+list of sessions ordered by recency of *use*. Toggle flips the cursor to the
+first live entry of this list that isn't your current session — i.e. the two
+most-recently-used sessions oscillate.
+
+A session becomes relevant — is promoted to the front of the relevance list —
+when you either:
+
+- **select it directly** — via toggle, pick, tmux-sessionx, or a manual
+  `switch-client`. The session you go to becomes relevant immediately.
+- **dwell on it** — reach it by walking (back/forward) and stay longer than
+  `@session-history-dwell-ms` (default 30 s).
+
+Walking through a session does **not** make it relevant. So if you're working
+in session A, walk the history back through several sessions to land on B, and
+press toggle, you flip back to A — not to the session adjacent to B — because A
+is what you were using and the walk never promoted the ones in between. Press
+toggle again and you're back on B (once B itself is relevant).
+
+The dwell timer is the one asynchronous path. When you walk onto a session, a
+background timer is armed; if you're still on that session when it fires, the
+session is promoted. The timer only ever touches the relevance list (never the
+timeline), and it self-cancels if you've moved on, so stale timers are harmless.
+
+When a session closes it is pruned from both lists and everything shifts down.
+Nothing is ever auto-added in its place, so closing the session you're currently
+on does **not** promote whatever tmux moves you to — that landing session will
+not become a toggle target until you actually select it or dwell on it.
 
 The plugin composes with tmux-sessionx and other pickers. Switches made through
-them count as new navigation points, the same as a manual switch.
+them count as direct selections and promote relevance, the same as a manual
+switch.
 
-The timeline is capped at the number of sessions currently open. When a session
-is closed, `session-closed` prunes it from history; when one is created,
-`session-created` prunes any dead entries and trims the timeline down to the
-open-session count, so history never references sessions that no longer exist
-and never grows past the number open.
+Both lists are capped at the number of sessions currently open and pruned of
+dead sessions on close/create, so neither ever references sessions that no
+longer exist or grows past the number open.
 
 ## Requirements
 
@@ -111,11 +145,11 @@ and never grows past the number open.
 
 ## Troubleshooting
 
-The engine script has two helpers for debugging:
+The engine script has helpers for debugging:
 
-- `status` prints the current timeline in the tmux message line, with the
-  cursor marked in brackets.
-- `reset` clears all state and starts the timeline over.
+- `status` prints the current timeline (cursor in brackets) and the relevance
+  list in the tmux message line.
+- `reset` clears all state and starts over.
 
 Run them through the script under your plugin directory, for example:
 
@@ -123,10 +157,16 @@ Run them through the script under your plugin directory, for example:
 ~/.tmux/plugins/tmux-session-history/scripts/session_history.sh status
 ```
 
+If toggle seems to target the "wrong" session, remember it tracks *relevance*,
+not recency: a session only enters the relevance list when you select it or
+dwell on it. Walked-past sessions are intentionally skipped. Lower
+`@session-history-dwell-ms` if you want walks to "stick" sooner.
+
 ## Limitations
 
 Single attached client. State is global, so two clients switching sessions
-independently share one timeline. Multi-client support is not implemented.
+independently share one timeline and one relevance list. Multi-client support
+is not implemented.
 
 ## License
 
