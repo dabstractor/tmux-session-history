@@ -83,7 +83,7 @@ Set any key to an empty string (or leave it unset) to leave it unbound.
 | `@session-history-back-key` | (empty) | Key bound to back. Empty leaves it unbound. |
 | `@session-history-forward-key` | (empty) | Key bound to forward. Empty leaves it unbound. |
 | `@session-history-pick-key` | (empty) | Key bound to pick. Empty leaves it unbound. |
-| `@session-history-dwell-ms` | `30000` | How long you must stay on a session you *walked* to (back/forward) before it counts as relevant. `0` disables dwell (relevance then comes only from selecting a session). |
+| `@session-history-dwell-ms` | `8000` | How long you must stay on a session you *walked* to (back/forward) before it counts as relevant. `0` disables dwell (relevance then comes only from selecting a session). |
 | `@session-history-popup` | `on` | Use an fzf-tmux popup for pick. Set `off` for inline fzf. |
 
 ## How it works
@@ -109,7 +109,7 @@ when you either:
 - **select it directly** — via toggle, pick, tmux-sessionx, or a manual
   `switch-client`. The session you go to becomes relevant immediately.
 - **dwell on it** — reach it by walking (back/forward) and stay longer than
-  `@session-history-dwell-ms` (default 30 s).
+  `@session-history-dwell-ms` (default 8 s).
 
 Walking through a session does **not** make it relevant. So if you're working
 in session A, walk the history back through several sessions to land on B, and
