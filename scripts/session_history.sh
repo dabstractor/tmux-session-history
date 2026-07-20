@@ -328,6 +328,13 @@ do_unfocus() {
 # kill the previous instance (see do_start_poller).
 do_poller() {
     S "$(H poller-pid)" "$$"
+    # Die CLEANLY on SIGTERM. do_start_poller kills us with `kill` (SIGTERM) on
+    # every plugin reload; if tmux sees the run-shell job die by signal it prints
+    # "terminated by signal 15", which leaks into prompts like the TPM update
+    # menu and blocks them. A trap that exits 0 is a normal exit -> no notice.
+    # We skip do_unfocus here: the new poller instance reclaims the pipe via
+    # do_focusin (closing the old pane's pipe -> old reader gets EOF -> exits).
+    trap 'exit 0' TERM
     while toggle_enabled; do
         local sess pane cur
         sess="$(tmux list-clients -F '#{client_session}' 2>/dev/null | head -n1)"
@@ -342,6 +349,7 @@ do_poller() {
         fi
         sleep 0.5
     done
+    trap - TERM
     do_unfocus
     S "$(H poller-pid)" ""
 }

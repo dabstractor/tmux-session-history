@@ -36,7 +36,6 @@ get_tmux_option() {
 tmux set-hook -g client-session-changed "run-shell '${SCRIPT} hook \"#{session_name}\"'"
 tmux set-hook -g session-closed         "run-shell '${SCRIPT} prune \"#{session_name}\"'"
 tmux set-hook -g session-created        "run-shell '${SCRIPT} maintain'"
-tmux run-shell "${SCRIPT} init"
 
 # --- key bindings (all overridable) -------------------------------------------
 # All four actions ship UNBOUND by default. There is no universally free,
@@ -72,6 +71,13 @@ fi
 # from do_init (pane-focus-in proved unreliable for intra-session switches), so
 # NOTHING extra is wired here — no hooks, no focus-events forcing. With toggle
 # unbound the poller is never started: no resident processes, no pipes.
+
+# Bootstrap the engine LAST, after every option/hook/key above is in place —
+# do_init reads @session-history-toggle-enabled (set by the toggle block) to
+# decide whether to start the focused-activity poller, so it must run after that
+# flag is set (calling it earlier raced the async run-shell ahead of the toggle
+# block and left the poller unset on reload).
+tmux run-shell "${SCRIPT} init"
 
 # The bind lines above short-circuit to false (exit 1) when their key is empty;
 # end on a no-op so plugin load always reports success.
