@@ -39,14 +39,23 @@
 # WHAT MAKES A SESSION "RELEVANT" (promoted to #1 of the relevance list)?
 #   • direct navigation — pick / sessionx / manual switch / toggle: the session
 #     you select becomes #1 immediately.
-#   • dwell — if you reach a session by a WALK and stay on it longer than
-#     @session-history-dwell-ms (default 30000 ms), it becomes #1.
-#   Walking (back/forward) through a session does NOT promote it — merely
-#   browsing past a session never makes it relevant.
-#
-#   (Output-activity was considered as a third signal but is unusable: tmux's
-#   alert-activity only fires for NON-focused/background windows, so it cannot
-#   detect typing in the session you are actually using. It is not wired.)
+#   • focused activity (the PRIMARY signal) — producing output OR typing in the
+#     session you are CURRENTLY VIEWING promotes it to #1 within ~1 s. tmux's
+#     alert-activity can't see the focused window (it fires only for background
+#     windows), so this is implemented instead with pipe-pane: the SINGLE
+#     focused pane is piped (pipe-pane -O captures both program output and the
+#     terminal's echo of typed keys) to a throttled reader that fires
+#     `activity <session>` at most once per second. Only the focused pane is
+#     ever piped — exactly one resident reader — so background output never
+#     promotes anything.
+#   • dwell (the SILENT-PRESENCE fallback) — if you reach a session by a WALK
+#     and stay on it longer than @session-history-dwell-ms (default 8000 ms)
+#     WITHOUT producing output, it becomes #1. Covers reading/thinking; it is
+#     superseded the instant you produce output.
+#   Walking (back/forward) through a session does NOT promote it by itself —
+#   merely browsing past a session never makes it relevant. But the moment you
+#   produce output in a walked-to session, activity promotes it immediately,
+#   which is exactly the user's intent ("I'm working here, that's my toggle").
 #
 # When a session closes it is removed from BOTH lists (everything above shifts
 # down). We NEVER auto-add a replacement, so closing the *current* session does
@@ -56,15 +65,22 @@
 # landed, by design.
 #
 # CONCURRENCY / SAFETY
-#   The three hooks run SYNCHRONOUSLY (no -b), serialized through tmux's command
-#   loop, so the read-modify-write on hist/idx/current/mode/tlist in the hook is
-#   race-free. The dwell timer is the ONE async path: the hook arms a tmux-managed
-#   background `run-shell -b` sleep job. To keep it from ever corrupting the
-#   critical history state, the dwell fire touches ONLY @session-history-tlist
-#   (never hist/idx/current/mode) and self-guards ("am I still the current
-#   session?") against the engine's tracked current, so a stale timer is a no-op.
-#   The worst case is a rare lost-update on the best-effort relevance list, which
-#   self-heals on the next navigation or dwell.
+#   The three core hooks run SYNCHRONOUSLY (no -b), serialized through tmux's
+#   command loop, so the read-modify-write on hist/idx/current/mode/tlist in the
+#   hook is race-free. There are TWO async best-effort paths, both of which touch
+#   ONLY @session-history-tlist (never hist/idx/current/mode), so a lost update
+#   there merely nudges the relevance list and self-heals on the next navigation:
+#     • dwell — the hook arms a tmux-managed background `run-shell -b` sleep that
+#       fires `dwell <session>`; it self-guards ("am I still current?").
+#     • activity — fired by the focused-pane pipe reader (`pipereader`), at most
+#       once per second of output; it self-guards against the LIVE attached
+#       session (not @current — see do_activity), so a reader on a pane that is
+#       no longer the focused one is a clean no-op.
+#   The pipe itself is managed by a synchronous pane-focus-in hook (`focusin`):
+#   exactly one pane — the focused one — is piped at any time. focusin closes the
+#   previously-tracked pane's pipe before opening the new one, tracked in the
+#   best-effort @session-history-piped-pane option (the activity guard makes any
+#   stray pipe harmless). See the ACTIVITY DETECTION section below.
 #
 # Global state, single-client assumption. Subcommands take the invoking session
 # as $1.
@@ -217,6 +233,89 @@ do_dwell() {
     else S "$(H tlist)" "${nh[*]}"; fi
 }
 
+# --- activity promoter (async; touches ONLY the relevance list) --------------
+# Fired by the focused-pane pipe reader (do_pipereader), at most once per second
+# of focused-pane output. Like do_dwell it read-modify-writes ONLY
+# @session-history-tlist, but its guard is different and deliberate: it checks
+# the LIVE attached session (`tmux display-message -p '#{session_name}'`), NOT
+# the engine's @current. Reason: pane-focus-in can fire BEFORE
+# client-session-changed on a switch, so @current still holds the previous
+# session at that instant — a guard on @current would wrongly skip a legitimate
+# focus-time fire. The live attached session is updated by tmux before any hook
+# runs, so it is correct even mid-switch. This also cleanly drops fires from any
+# pipe left on a non-focused (background) pane: its session != the attached
+# session => no-op, so a stray/leaked pipe can never promote a background session.
+do_activity() {
+    local s="$1"
+    toggle_enabled || return 0
+    session_exists "$s" || return 0
+    local attached; attached="$(tmux display-message -p '#{session_name}' 2>/dev/null)"
+    [ "$s" = "$attached" ] || return 0
+    local raw arr=() nh=() i
+    raw="$(G "$(H tlist)")"
+    [ -n "$raw" ] && while IFS= read -r line; do [ -n "$line" ] && arr+=("$line"); done <<< "$raw"
+    for i in "${!arr[@]}"; do [ "${arr[$i]}" != "$s" ] && nh+=("${arr[$i]}"); done
+    nh=("$s" "${nh[@]}")
+    local IFS=$'\n'
+    if [ "${#nh[@]}" -eq 0 ]; then S "$(H tlist)" ""
+    else S "$(H tlist)" "${nh[*]}"; fi
+}
+
+# --- focused-session activity detection (pipe-pane on the focused pane) -------
+# tmux's alert-activity sees only BACKGROUND windows, so it cannot detect that
+# the user is actively working in the session they are viewing. We instead keep
+# a pipe-pane -O on the SINGLE focused pane: -O feeds the pane's output stream
+# (which includes both program output and the terminal's echo of typed keys) to a
+# THROTTLED reader. The reader promotes the pane's session at most once per
+# second and stays alive for the whole life of the pipe (focusin closes it on the
+# next focus change), so a spurious early byte — e.g. a prompt redrawing when
+# the pane gains focus — can never "use up" detection; real output afterwards
+# still fires. Only the focused pane is ever piped (one resident reader), so
+# background output can never promote a session.
+#
+# focusin re-pipes on every focus change. pane-focus-in fires for the active pane
+# on session/window/pane switches (needs focus-events on, which the entry point
+# enables with toggle) and on client attach, so it follows focus AND bootstraps.
+#
+# do_pipereader: stdin = the focused pane's output stream. Read it continuously;
+# at most once per wall-clock second, look up the pane's session and promote it
+# (do_activity re-checks that it is still the focused session). EOF (pipe close)
+# ends the read loop and the process exits cleanly. Runs as the pipe-pane command,
+# i.e. ONE resident process per piped pane.
+do_pipereader() {
+    local pane="$1" c="" last=0 now sess
+    toggle_enabled || return 0
+    while IFS= read -r -N 1 c; do          # one byte at a time until EOF
+        now="${EPOCHSECONDS:-$(date +%s)}"  # bash5 builtin (no fork); date fallback
+        [ "$now" -gt "$last" ] || continue  # at most one promote per second
+        last="$now"
+        sess="$(tmux display-message -p -t "$pane" '#{session_name}' 2>/dev/null)" || continue
+        [ -n "$sess" ] && do_activity "$sess"
+    done
+}
+
+# do_focusin: close the previously-piped pane (if different), open the throttled
+# reader on the newly-focused pane, remember it. Idempotent and self-correcting.
+# We pass the pane id (not the session name) into the command string so pipe-pane
+# never re-expands a '#' that might appear in a session name.
+do_focusin() {
+    local pane="$1"
+    toggle_enabled || return 0
+    [ -n "$pane" ] || return 0
+    local old; old="$(G "$(H piped-pane)")"
+    [ -n "$old" ] && [ "$old" != "$pane" ] && tmux pipe-pane -t "$old" "" 2>/dev/null
+    tmux pipe-pane -O -t "$pane" "'${SELF}' pipereader '${pane}'" 2>/dev/null
+    S "$(H piped-pane)" "$pane"
+}
+
+# do_unfocus: drop the pipe on detach/shutdown. The activity guard already makes
+# a stray pipe harmless; this is hygiene (no resident reader once detached).
+do_unfocus() {
+    local old; old="$(G "$(H piped-pane)")"
+    [ -n "$old" ] && tmux pipe-pane -t "$old" "" 2>/dev/null
+    S "$(H piped-pane)" ""
+}
+
 # --- toggle: flip to the other most-relevant session -------------------------
 # Target = the first LIVE relevance-list entry that isn't the current session.
 # (If current is #1, that yields #2; otherwise it yields #1 — so consecutive
@@ -367,6 +466,13 @@ do_init() {
         [ -z "$s" ] && s="$(tmux list-sessions -F '#{session_created} #{session_name}' 2>/dev/null | sort -rn | head -n1 | cut -d ' ' -f2-)"
         [ -n "$s" ] && { HIST=("$s"); IDX=0; CURRENT="$s"; save; }
     fi
+    # bootstrap focused-activity detection on the current pane (pane-focus-in
+    # keeps it following focus afterwards). Only when a client is actually
+    # attached — display-message defaults to the most-recent session even with
+    # no client, and we don't want a resident reader with nobody viewing.
+    if toggle_enabled && [ -n "$(tmux list-clients -F x 2>/dev/null | head -1)" ]; then
+        local pane; pane="$(tmux display-message -p '#{pane_id}' 2>/dev/null)" && do_focusin "$pane"
+    fi
 }
 
 do_status() {
@@ -393,16 +499,20 @@ do_reset() {
 
 cmd="${1:-}"; to="${2:-}"
 case "$cmd" in
-    init)     do_init ;;
-    hook)     load; do_hook "$to" ;;
-    dwell)    do_dwell "$to" ;;
-    prune)    load; prune_dead; save ;;
-    maintain) do_maintain ;;
-    toggle)   do_toggle "$to" ;;
-    back)     do_back "$to" ;;
-    forward)  do_forward "$to" ;;
-    pick)     do_pick "$to" ;;
-    status)   do_status ;;
-    reset)    do_reset ;;
-    *) echo "Usage: $0 {init|hook|dwell|prune|maintain|toggle|back|forward|pick|status|reset} [session]" >&2; exit 1 ;;
+    init)      do_init ;;
+    hook)      load; do_hook "$to" ;;
+    dwell)     do_dwell "$to" ;;
+    activity)  do_activity "$to" ;;
+    pipereader) do_pipereader "$to" ;;
+    focusin)   do_focusin "$to" ;;
+    unfocus)   do_unfocus ;;
+    prune)     load; prune_dead; save ;;
+    maintain)  do_maintain ;;
+    toggle)    do_toggle "$to" ;;
+    back)      do_back "$to" ;;
+    forward)   do_forward "$to" ;;
+    pick)      do_pick "$to" ;;
+    status)    do_status ;;
+    reset)     do_reset ;;
+    *) echo "Usage: $0 {init|hook|dwell|activity|pipereader|focusin|unfocus|prune|maintain|toggle|back|forward|pick|status|reset} [session|pane]" >&2; exit 1 ;;
 esac

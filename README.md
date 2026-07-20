@@ -83,7 +83,7 @@ Set any key to an empty string (or leave it unset) to leave it unbound.
 | `@session-history-back-key` | (empty) | Key bound to back. Empty leaves it unbound. |
 | `@session-history-forward-key` | (empty) | Key bound to forward. Empty leaves it unbound. |
 | `@session-history-pick-key` | (empty) | Key bound to pick. Empty leaves it unbound. |
-| `@session-history-dwell-ms` | `8000` | How long you must stay on a session you *walked* to (back/forward) before it counts as relevant. `0` disables dwell (relevance then comes only from selecting a session). |
+| `@session-history-dwell-ms` | `8000` | Fallback for *silent* presence: how long you must stay on a session you *walked* to (back/forward) without producing output before it counts as relevant. Producing output there promotes it immediately regardless. `0` disables dwell (relevance then comes only from selecting a session or producing output in it). |
 | `@session-history-popup` | `on` | Use an fzf-tmux popup for pick. Set `off` for inline fzf. |
 
 ## How it works
@@ -106,21 +106,42 @@ most-recently-used sessions oscillate.
 A session becomes relevant — is promoted to the front of the relevance list —
 when you either:
 
+- **produce output or type in it while viewing it** — this is the *primary*
+  signal. The moment you're working in the session in front of you, it becomes
+  the toggle target, within about a second. (tmux's built-in `monitor-activity`
+  can't see this — it only notices *background* windows — so the plugin instead
+  pipes the single focused pane and watches its stream.)
 - **select it directly** — via toggle, pick, tmux-sessionx, or a manual
   `switch-client`. The session you go to becomes relevant immediately.
 - **dwell on it** — reach it by walking (back/forward) and stay longer than
-  `@session-history-dwell-ms` (default 8 s).
+  `@session-history-dwell-ms` (default 8 s) *without* producing output. This is
+  the fallback for silent presence (reading, thinking).
 
-Walking through a session does **not** make it relevant. So if you're working
+Walking through a session does **not** make it relevant by itself. So if you're working
 in session A, walk the history back through several sessions to land on B, and
 press toggle, you flip back to A — not to the session adjacent to B — because A
-is what you were using and the walk never promoted the ones in between. Press
+is what you were using and the walk never promoted the ones in between. But the
+instant you produce output in a walked-to session, activity promotes it
+immediately, so the dwell timer never gets in the way of active use. Press
 toggle again and you're back on B (once B itself is relevant).
 
-The dwell timer is the one asynchronous path. When you walk onto a session, a
-background timer is armed; if you're still on that session when it fires, the
-session is promoted. The timer only ever touches the relevance list (never the
-timeline), and it self-cancels if you've moved on, so stale timers are harmless.
+**How activity detection works.** When toggle is bound the plugin turns on
+`focus-events` and keeps a `pipe-pane` on the single focused pane. The pane's
+output stream — which includes both program output and the terminal's echo of
+your keystrokes — feeds a small throttled reader that promotes the pane's
+session at most once per second. Only the focused pane is ever piped (one
+resident reader), so output in sessions you're *not* viewing can never promote
+them. The pipe follows focus automatically (it re-pipes on every session,
+window, and pane switch), so it works no matter how you navigate. With toggle
+unbound none of this is wired — no pipes, no resident readers.
+
+The dwell timer is one asynchronous path; focused-activity detection is the
+other. Both touch only the relevance list (never the timeline), so a rare lost
+update only nudges relevance and self-heals on the next switch. When you walk
+onto a session, a background timer is armed; if you're still on that session
+when it fires, the session is promoted. The moment you produce output there,
+activity promotes it instead, so dwell only matters for silent presence. The
+timer self-cancels if you've moved on, so stale timers are harmless.
 
 When a session closes it is pruned from both lists and everything shifts down.
 Nothing is ever auto-added in its place, so closing the session you're currently
@@ -158,9 +179,10 @@ Run them through the script under your plugin directory, for example:
 ```
 
 If toggle seems to target the "wrong" session, remember it tracks *relevance*,
-not recency: a session only enters the relevance list when you select it or
-dwell on it. Walked-past sessions are intentionally skipped. Lower
-`@session-history-dwell-ms` if you want walks to "stick" sooner.
+not recency: a session enters the relevance list when you select it, produce
+output in it while viewing it, or dwell on it. Walked-past sessions are
+intentionally skipped (unless you then produce output in them). Lower
+`@session-history-dwell-ms` if you want silent walks to "stick" sooner.
 
 ## Limitations
 

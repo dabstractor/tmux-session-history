@@ -64,6 +64,24 @@ fi
 [ -n "$forward_key" ] && tmux bind-key "$forward_key" run-shell "${SCRIPT} forward \"#{session_name}\""
 [ -n "$pick_key" ]    && tmux bind-key "$pick_key"    run-shell "${SCRIPT} pick    \"#{session_name}\""
 
+# --- focused-activity detection (only with toggle bound) --------------------
+# The relevance list's PRIMARY signal is output/typing in the session you are
+# viewing. tmux's alert-activity cannot see the focused window, so the engine
+# keeps a pipe-pane on the single focused pane and promotes its session on the
+# first byte of real output (see scripts/session_history.sh). That needs two
+# things wired here, both only when toggle is enabled:
+#   • focus-events ON — so pane-focus-in fires on tmux-INTERNAL session/window/
+#     pane switches (and on client attach), not just terminal focus gain/loss.
+#   • a pane-focus-in hook that re-pipes the newly-focused pane (focusin follows
+#     focus, closing the old pane's pipe first), and a client-detached hook that
+#     drops the pipe for hygiene. With toggle unbound we wire none of this, so
+#   there are no resident readers and no pipes — the engine stays lightweight.
+if [ -n "$toggle_key" ]; then
+    tmux set-option -g focus-events on
+    tmux set-hook -g pane-focus-in   "run-shell '${SCRIPT} focusin \"#{pane_id}\"'"
+    tmux set-hook -g client-detached "run-shell '${SCRIPT} unfocus'"
+fi
+
 # The bind lines above short-circuit to false (exit 1) when their key is empty;
 # end on a no-op so plugin load always reports success.
 :
