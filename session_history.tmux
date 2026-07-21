@@ -67,10 +67,11 @@ fi
 # The relevance list's PRIMARY signal is output/typing in the session you are
 # viewing. tmux's alert-activity cannot see the focused window, so the engine
 # keeps a pipe-pane on the focused pane and promotes its session on output (see
-# scripts/session_history.sh). Focus is followed by a background poller started
-# from do_init (pane-focus-in proved unreliable for intra-session switches), so
-# NOTHING extra is wired here — no hooks, no focus-events forcing. With toggle
-# unbound the poller is never started: no resident processes, no pipes.
+# scripts/session_history.sh). The pipe is re-targeted on every switch by the
+# existing client-session-changed hook (do_hook) — no extra hook is needed here —
+# and a background poller (started from do_init) backs it up for intra-session
+# pane/window switches (pane-focus-in proved unreliable). With toggle unbound
+# the poller is never started: no resident processes, no pipes.
 
 # Bootstrap the engine LAST, after every option/hook/key above is in place —
 # do_init reads @session-history-toggle-enabled (set by the toggle block) to
