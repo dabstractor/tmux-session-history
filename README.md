@@ -83,7 +83,7 @@ Set any key to an empty string (or leave it unset) to leave it unbound.
 | `@session-history-back-key` | (empty) | Key bound to back. Empty leaves it unbound. |
 | `@session-history-forward-key` | (empty) | Key bound to forward. Empty leaves it unbound. |
 | `@session-history-pick-key` | (empty) | Key bound to pick. Empty leaves it unbound. |
-| `@session-history-dwell-ms` | `8000` | Fallback for *silent* presence: how long you must stay on a session you *walked* to (back/forward) without producing output before it counts as relevant. Producing output there promotes it immediately regardless. `0` disables dwell (relevance then comes only from selecting a session or producing output in it). |
+| `@session-history-dwell-ms` | `8000` | Fallback for *silent* presence: how long you must stay on a session you *walked* to (back/forward) without typing/interacting before it counts as relevant. Working there (typing, switching panes, any tmux command) promotes it immediately regardless. `0` disables dwell (relevance then comes only from selecting a session or interacting with it). |
 | `@session-history-popup` | `on` | Use an fzf-tmux popup for pick. Set `off` for inline fzf. |
 
 ## How it works
@@ -106,11 +106,13 @@ most-recently-used sessions oscillate.
 A session becomes relevant — is promoted to the front of the relevance list —
 when you either:
 
-- **produce output or type in it while viewing it** — this is the *primary*
-  signal. The moment you're working in the session in front of you, it becomes
-  the toggle target, within about a second. (tmux's built-in `monitor-activity`
-  can't see this — it only notices *background* windows — so the plugin instead
-  pipes the single focused pane and watches its stream.)
+- **type, switch panes/windows, or run any tmux command in it while viewing it** —
+  this is the *primary* signal. The moment you're working in the session in
+  front of you, it becomes the toggle target, within about half a second to a
+  second. (tmux's built-in `monitor-activity` can't see this — it only notices
+  *background* windows — so the plugin instead watches the attached client's
+  activity timestamp, which advances on every keystroke you send: characters
+  typed into the shell, pane/window switches, and tmux commands alike.)
 - **select it directly** — via toggle, pick, tmux-sessionx, or a manual
   `switch-client`. The session you go to becomes relevant immediately.
 - **dwell on it** — reach it by walking (back/forward) and stay longer than
@@ -125,17 +127,17 @@ instant you produce output in a walked-to session, activity promotes it
 immediately, so the dwell timer never gets in the way of active use. Press
 toggle again and you're back on B (once B itself is relevant).
 
-**How activity detection works.** When toggle is bound the plugin keeps a
-`pipe-pane` on your focused pane. The pane's output stream — which includes
-both program output and the terminal's echo of your keystrokes — feeds a
-throttled reader that promotes the pane's session at most once per second. The
-pipe is re-targeted onto the landing session's active pane the instant you
-switch (via the same hook that tracks navigation), so it's already on the pane
-you land on before your next keystroke; a low-frequency background poller backs
-it up for pane/window switches *within* a session. Only the focused pane is
-ever piped (one resident reader), so output in sessions you're *not* viewing
-can never promote them. With toggle unbound there are no pipes and no resident
-processes.
+**How activity detection works.** When toggle is bound the plugin watches the
+attached client's `client_activity` timestamp. tmux advances it on every
+keystroke you send — a character passed through to the shell, a pane/window
+switch, or any tmux command — so it is a direct signal for "the user is working
+in the session they're viewing". A small background poller promotes the current
+session whenever that timestamp advances while the session stays the same
+(~0.5–1 s). A session-switch key (back/forward/toggle/sessionx) also advances
+the timestamp, but it changes the session at the same time, so it is not
+mistaken for work — walking past a session never promotes it. There are no
+per-pane pipes and only one resident process; with toggle unbound there are no
+resident processes at all.
 
 The dwell timer is one asynchronous path; focused-activity detection is the
 other. Both touch only the relevance list (never the timeline), so a rare lost

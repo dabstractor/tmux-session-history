@@ -64,14 +64,13 @@ fi
 [ -n "$pick_key" ]    && tmux bind-key "$pick_key"    run-shell "${SCRIPT} pick    \"#{session_name}\""
 
 # --- focused-activity detection (only with toggle bound) --------------------
-# The relevance list's PRIMARY signal is output/typing in the session you are
-# viewing. tmux's alert-activity cannot see the focused window, so the engine
-# keeps a pipe-pane on the focused pane and promotes its session on output (see
-# scripts/session_history.sh). The pipe is re-targeted on every switch by the
-# existing client-session-changed hook (do_hook) — no extra hook is needed here —
-# and a background poller (started from do_init) backs it up for intra-session
-# pane/window switches (pane-focus-in proved unreliable). With toggle unbound
-# the poller is never started: no resident processes, no pipes.
+# The relevance list's PRIMARY signal is input in the session you are viewing —
+# typing, pane/window switches, or any tmux command. tmux's alert-activity cannot
+# see the focused window, so the engine watches the attached client's
+# client_activity timestamp instead (see scripts/session_history.sh). The
+# poller promotes the current session whenever that timestamp advances while the
+# session stays the same; no extra hook is needed here. With toggle unbound the
+# poller is never started: no resident processes.
 
 # Bootstrap the engine LAST, after every option/hook/key above is in place —
 # do_init reads @session-history-toggle-enabled (set by the toggle block) to
