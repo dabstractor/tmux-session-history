@@ -55,7 +55,7 @@
 #     processes, no focus-following — and it captures typing AND pane/window
 #     switches AND any tmux action alike.
 #   • dwell (the SILENT-PRESENCE fallback) — if you reach a session by a WALK
-#     and stay on it longer than @session-history-dwell-ms (default 8000 ms)
+#     and stay on it longer than @session-history-dwell-ms (default 10000 ms)
 #     WITHOUT producing output, it becomes #1. Covers reading/thinking; it is
 #     superseded the instant you produce output.
 #   Walking (back/forward) through a session does NOT promote it by itself —
@@ -115,7 +115,7 @@ session_exists() { tmux has-session -t "$1" 2>/dev/null; }
 attached_session() { tmux display-message -p '#{session_name}' 2>/dev/null; }
 toggle_enabled() { [ "$(G "$(H toggle-enabled)")" = "on" ]; }
 # user-facing dwell threshold in ms; 0 disables dwell entirely
-dwell_ms() { local d; d="$(G "$(H dwell-ms)")"; case "$d" in ''|*[!0-9]*) echo 8000 ;; *) echo "$d" ;; esac; }
+dwell_ms() { local d; d="$(G "$(H dwell-ms)")"; case "$d" in ''|*[!0-9]*) echo 10000 ;; *) echo "$d" ;; esac; }
 
 CURRENT="" IDX="0"
 HIST=() TLIST=()

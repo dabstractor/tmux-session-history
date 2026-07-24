@@ -48,7 +48,7 @@ pick_key="$(get_tmux_option    '@session-history-pick-key'    '')"
 
 # Default the dwell threshold once (user can override before or after load).
 [ -z "$(get_tmux_option '@session-history-dwell-ms' '')" ] && \
-    tmux set-option -g '@session-history-dwell-ms' 8000
+    tmux set-option -g '@session-history-dwell-ms' 10000
 
 # Toggle is a load-bearing opt-in: the enabled flag tells the engine whether to
 # maintain the relevance list and arm dwell timers. Bind the key ONLY when set,

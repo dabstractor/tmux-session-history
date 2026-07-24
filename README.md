@@ -83,7 +83,7 @@ Set any key to an empty string (or leave it unset) to leave it unbound.
 | `@session-history-back-key` | (empty) | Key bound to back. Empty leaves it unbound. |
 | `@session-history-forward-key` | (empty) | Key bound to forward. Empty leaves it unbound. |
 | `@session-history-pick-key` | (empty) | Key bound to pick. Empty leaves it unbound. |
-| `@session-history-dwell-ms` | `8000` | Fallback for *silent* presence: how long you must stay on a session you *walked* to (back/forward) without typing/interacting before it counts as relevant. Working there (typing, switching panes, any tmux command) promotes it immediately regardless. `0` disables dwell (relevance then comes only from selecting a session or interacting with it). |
+| `@session-history-dwell-ms` | `10000` | Fallback for *silent* presence: how long you must stay on a session you *walked* to (back/forward) without typing/interacting before it counts as relevant. Working there (typing, switching panes, any tmux command) promotes it immediately regardless. `0` disables dwell (relevance then comes only from selecting a session or interacting with it). |
 | `@session-history-popup` | `on` | Use an fzf-tmux popup for pick. Set `off` for inline fzf. |
 
 ## How it works
@@ -116,7 +116,7 @@ when you either:
 - **select it directly** — via toggle, pick, tmux-sessionx, or a manual
   `switch-client`. The session you go to becomes relevant immediately.
 - **dwell on it** — reach it by walking (back/forward) and stay longer than
-  `@session-history-dwell-ms` (default 8 s) *without* producing output. This is
+  `@session-history-dwell-ms` (default 30 s) *without* typing/interacting. This is
   the fallback for silent presence (reading, thinking).
 
 Walking through a session does **not** make it relevant by itself. So if you're working
