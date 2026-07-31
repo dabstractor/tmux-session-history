@@ -196,8 +196,20 @@ do_hook() {
     local to="$1" from i mt mtarget
     [ -z "$to" ] && to="$(attached_session)"; [ -z "$to" ] && return
 
-    if [ -z "$CURRENT" ]; then                       # first fire / after reset
+    # Distinguish "genuinely uninitialized" (no history yet) from "CURRENT was
+    # blanked but history still exists". The latter happens when prune_dead
+    # couldn't resolve the landing session (the client was mid-relocation when
+    # session-closed fired) and left CURRENT empty. Resetting HIST to [to] then
+    # would DESTROY a valid timeline — so only seed on a truly empty history;
+    # otherwise adopt `to` as current without touching the timeline.
+    if [ "${#HIST[@]}" -eq 0 ]; then                   # genuine first fire: seed
         HIST=("$to"); IDX=0; CURRENT="$to"; S "$(H mode)" ""; save; return
+    fi
+    if [ -z "$CURRENT" ]; then                        # blanked mid-session:
+        CURRENT="$to"                                #   adopt landing as current
+        if i="$(index_of "$to")"; then IDX="$i"      #   usually already in history
+        else HIST+=("$to"); IDX=$(( ${#HIST[@]} - 1 )); fi   # else append (no collapse)
+        S "$(H mode)" ""; save; return
     fi
     [ "$to" = "$CURRENT" ] && { S "$(H mode)" ""; return; }
 
@@ -444,7 +456,24 @@ prune_dead() {
     for i in "${!TLIST[@]}"; do session_exists "${TLIST[$i]}" && tl+=("${TLIST[$i]}"); done
     TLIST=("${tl[@]}")
     if ! session_exists "$CURRENT"; then
-        CURRENT="$(attached_session)"; local j; j="$(index_of "$CURRENT")" && IDX="$j"
+        local landed
+        landed="$(attached_session)"
+        # The client can be mid-relocation when session-closed fires, so the
+        # attached session is momentarily unresolvable (or still reports the
+        # just-closed session). Never blank CURRENT in that case — a blank
+        # CURRENT makes the next client-session-changed hook think the engine
+        # is uninitialized and wipe the timeline. Fall back to the tip of the
+        # (now-pruned) history; the landing hook / reconcile corrects it.
+        if [ -z "$landed" ] || ! session_exists "$landed" ]; then
+            landed=""
+            for (( i=${#HIST[@]}-1; i>=0; i-- )); do
+                session_exists "${HIST[$i]}" && { landed="${HIST[$i]}"; break; }
+            done
+        fi
+        if [ -n "$landed" ]; then
+            CURRENT="$landed"
+            local j; j="$(index_of "$CURRENT")" && IDX="$j"
+        fi
     fi
 }
 
@@ -483,7 +512,18 @@ do_init() {
     if [ -z "$CURRENT" ]; then
         local s; s="$(attached_session)"
         [ -z "$s" ] && s="$(tmux list-sessions -F '#{session_created} #{session_name}' 2>/dev/null | sort -rn | head -n1 | cut -d ' ' -f2-)"
-        [ -n "$s" ] && { HIST=("$s"); IDX=0; CURRENT="$s"; save; }
+        # Same guard as do_hook: only SEED history on a genuinely empty
+        # timeline. If history exists (e.g. CURRENT was blanked by a prior
+        # prune), adopt `s` as current without destroying it.
+        if [ -n "$s" ]; then
+            if [ "${#HIST[@]}" -eq 0 ]; then HIST=("$s"); IDX=0
+            else
+                local j
+                if j="$(index_of "$s")"; then IDX="$j"
+                else HIST+=("$s"); IDX=$(( ${#HIST[@]} - 1 )); fi
+            fi
+            CURRENT="$s"; save
+        fi
     fi
     # Legacy cleanup: older versions kept a pipe-pane on the focused pane,
     # tracked in @session-history-piped-pane. Close just THAT pane's pipe (if
