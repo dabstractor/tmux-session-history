@@ -167,12 +167,17 @@ promote_tlist() {
     TLIST=("$s" "${nh[@]}")
 }
 
-# NAVIGATION helper: keep backward history (..cursor) minus 'to', append 'to'.
-# => 'to' lands at the tip; forward history is collapsed (browser "end of road").
-collapse_and_append() {
+# NAVIGATION helper: move `to` to the tip, preserving every other entry (dedup).
+# tmux sessions persist when you navigate away from them, so — unlike a browser —
+# there is no "forward" history to invalidate: history is an accumulating,
+# duplicate-free log of the sessions you have visited. Navigating to a session
+# (pick / sessionx / manual switch) therefore must never DROP other entries; it
+# only reorders `to` to the tip. (Earlier this collapsed forward history on
+# navigation from a non-tip cursor, which silently truncated the list whenever
+# you back'd/toggled and then switched — losing still-open sessions.)
+move_to_tip() {
     local to="$1" nh=() i
     for i in "${!HIST[@]}"; do
-        [ "$i" -gt "$IDX" ] && break
         [ "${HIST[$i]}" != "$to" ] && nh+=("${HIST[$i]}")
     done
     nh+=("$to")
@@ -226,11 +231,11 @@ do_hook() {
     elif [ "$mt" = "toggle" ] && [ "$mtarget" = "$to" ]; then
         # TOGGLE: cursor move (no history collapse) + mark target relevant
         if i="$(index_of "$to")"; then IDX="$i"
-        else collapse_and_append "$to"; IDX=$(( ${#HIST[@]} - 1 )); fi   # rare: not in history
+        else move_to_tip "$to"; IDX=$(( ${#HIST[@]} - 1 )); fi   # rare: not in history
         toggle_enabled && promote_tlist "$to"
     else
-        # NAVIGATION (or a stale/unmatched flag): collapse + append + relevance
-        collapse_and_append "$to"; IDX=$(( ${#HIST[@]} - 1 ))
+        # NAVIGATION (or a stale/unmatched flag): move `to` to tip + relevance
+        move_to_tip "$to"; IDX=$(( ${#HIST[@]} - 1 ))
         toggle_enabled && promote_tlist "$to"
     fi
 
