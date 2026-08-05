@@ -84,14 +84,14 @@
               "type": "Task",
               "id": "P1.M1.T3",
               "title": "Update Dwell Default to 30000 ms",
-              "status": "Researching",
+              "status": "Complete",
               "description": "Change the dwell_ms() fallback default from 10000 to 30000 to match PRD §15. This is the coupled compensating change: once focused-activity detection is removed, dwell becomes the only silent-presence signal, so its threshold must be long enough (30 s) to avoid spurious promotion of sessions merely browsed past.",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M1.T3.S1",
                   "title": "Change dwell_ms() default from 10000 to 30000",
-                  "status": "Researching",
+                  "status": "Complete",
                   "story_points": 1,
                   "dependencies": [],
                   "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 2a. The dwell_ms() function (~line 154) reads @session-history-dwell-ms and falls back to 10000 for empty/non-numeric values. PRD §15 specifies the default as 30000. PRD §14 states: 'Non-numeric dwell-ms → treated as the default (30000).' The function's case statement currently is: 'case \"$d\" in \\'\\'\\'|*[!0-9]*) echo 10000 ;; *) echo \"$d\" ;; esac'.\n2. INPUT: scripts/session_history.sh with dwell_ms() at ~line 154 echoing 10000 as fallback.\n3. LOGIC: Change the fallback value in dwell_ms() from 'echo 10000' to 'echo 30000'. This single change covers the engine's runtime default. The entry-point default (session_history.tmux:55) is handled in P1.M2.T1.S1. The README Options table is handled in P1.M3.T2.S1. All three must agree on 30000.\n4. OUTPUT: dwell_ms() returns 30000 when @session-history-dwell-ms is empty or non-numeric, matching PRD §15.\n5. DOCS: none — the comment on this line ('default 10000 ms') is inside the header comment block rewritten in P1.M1.T4.",
@@ -115,7 +115,7 @@
                   "type": "Subtask",
                   "id": "P1.M1.T4.S1",
                   "title": "Rewrite 'WHAT MAKES A SESSION RELEVANT' comment section",
-                  "status": "Planned",
+                  "status": "Researching",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1",

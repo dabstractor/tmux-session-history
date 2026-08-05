@@ -151,7 +151,7 @@ session_exists() {
 attached_session() { tmux display-message -p '#{session_name}' 2>/dev/null; }
 toggle_enabled() { [ "$(G "$(H toggle-enabled)")" = "on" ]; }
 # user-facing dwell threshold in ms; 0 disables dwell entirely
-dwell_ms() { local d; d="$(G "$(H dwell-ms)")"; case "$d" in ''|*[!0-9]*) echo 10000 ;; *) echo "$d" ;; esac; }
+dwell_ms() { local d; d="$(G "$(H dwell-ms)")"; case "$d" in ''|*[!0-9]*) echo 30000 ;; *) echo "$d" ;; esac; }
 
 CURRENT="" IDX="0"
 HIST=() TLIST=()
