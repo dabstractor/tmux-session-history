@@ -77,22 +77,11 @@
 #   how tmux schedules the async run-shells. (Machine-speed bursts of
 #   switch-client can still collapse into a single step — a known, accepted
 #   limitation — but they can no longer corrupt the timeline.)
-#   The TWO further async paths (dwell, activity) touch ONLY @session-history-
-#   tlist, AND now also take the lock, so they are fully serialized as well:
+#   The ONE further async path (dwell) touches ONLY @session-history-tlist AND
+#   also takes the lock, so it is fully serialized as well and can never corrupt
+#   hist/idx/current/mode:
 #     • dwell — the hook arms a tmux-managed background `run-shell -b` sleep that
 #       fires `dwell <session>`; it self-guards ("am I still current?").
-#     • activity — fired by the background poller (do_poller) when the attached
-#       client's `#{client_activity}` advances while the session stays the same
-#       (the user typed / switched panes / ran a tmux command in the session
-#       they're viewing). It self-guards against the LIVE attached session (not
-#       @current — see do_activity), so a late fire is a clean no-op.
-#   Focused-activity detection runs entirely in that one poller: it reads the
-#   attached client's session + client_activity ~2x/sec, promotes the current
-#   session when activity advances on an unchanged session, and re-anchors its
-#   baseline whenever the session changes (so a switch can't be mistaken for
-#   work). There are NO per-pane pipes and NO reader processes; the poller is the
-#   only resident process for activity, and it self-terminates when toggle is
-#   off. See the ACTIVITY DETECTION section below.
 #
 # Global state, single-client assumption. Subcommands take the invoking session
 # as $1.
@@ -112,8 +101,8 @@ SELF="${BASH_SOURCE[0]:-$0}"
 # concurrently whenever a close also relocates the client. Every mutating
 # command below therefore takes an exclusive flock on a stable file for its
 # whole critical section, so the read-modify-writes cannot interleave. Each
-# section is a few tens of ms; keypresses are ~150 ms apart and the poller fires
-# only every ~0.5 s, so contention is imperceptible. The lock auto-releases if a
+# section is a few tens of ms; keypresses are ~150 ms apart, so contention is
+# imperceptible. The lock auto-releases if a
 # command dies (fd closes / process exits), so it can never be held stale.
 LOCK_FILE="${SHT_LOCK:-${TMPDIR:-/tmp}/tmux-session-history.lock}"
 lock()   { exec 9>"$LOCK_FILE"; flock 9; }   # blocks until exclusive lock acquired
