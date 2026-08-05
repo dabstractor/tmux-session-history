@@ -331,29 +331,32 @@ to another session. That landing session must **not** be promoted into the
 relevance list merely because tmux dropped you there — otherwise toggle would
 "return" you to a session you never chose, until you dwell on or select it.
 
-**How it is satisfied (no special code needed on tmux 3.6a).** Empirically, on
-tmux 3.6a, killing the client's current session fires `session-closed` (→
-`prune_dead`) but does **not** fire `client-session-changed` for the automatic
-landing. Verified: during a kill-current, only `prune_dead` runs; no landing
-hook fires. Therefore:
+**How it is satisfied.** When the current session closes, tmux relocates the
+client to another session and fires `session-closed` (→ `prune_dead`); on many
+setups the relocation *also* fires `client-session-changed` for the landing.
+Two independent mechanisms keep the landing from being treated as a navigation
+(so it is neither reordered to the tip nor promoted in the relevance list):
 
-- `prune_dead` removes the dead current from both lists and shifts everything
-  down. The old #2 becomes #1, old #3 becomes #2, etc.
-- `prune_dead` sets `current` to the landing session (via `attached_session`),
-  so the engine knows where you are — but it does **not** add the landing to
-  `tlist`.
-- Because no landing hook fires, there is no NAVIGATION branch to promote it.
+- **`do_hook` close-relocation detection.** If the session being LEFT
+  (`from` = the previous `current`) no longer exists, the switch was forced by a
+  close, so the hook performs a pure cursor move to the landing's existing
+  position (no `move_to_tip`, no `promote_tlist`, no dwell). This makes the
+  outcome identical whether the landing hook or `prune_dead` acquires the lock
+  first.
+- **`prune_dead` cursor-based landing.** If the attached client can't be
+  resolved when `session-closed` fires (mid-relocation, or no client), prune
+  lands `current` on the session at the **cursor** and its nearest live
+  neighbors — never the timeline tip — so a subsequent landing hook can't
+  reorder the tip ahead of the forward history.
 
-Net: the landing session is current but **not relevant**. Toggling will not
-return you to it until you select it or dwell on it — exactly the spec. If the
-landing happened to already be relevant (e.g. tmux moved you to a session you
-were using), it stays relevant by the shift-up, which is correct.
+Net: closing a session removes exactly that session and leaves the rest of the
+stack (and its order) untouched; the old top stays reachable via forward.
 
 **Why no explicit "suppress" flag.** A natural idea is a `mode = "auto"` flag
-set in `prune_dead` and consumed by a landing hook. This is **not** used,
-because if the landing hook does not fire (as on 3.6a), the flag would linger
-and corrupt the *next* real navigation. Relying on tmux not firing the landing
-hook is both simpler and avoids that footgun.
+set in `prune_dead` and consumed by a landing hook. This is fragile: if the
+landing hook does not fire the flag lingers, and the close-vs-navigation
+detection above (the leaving session being dead) is both simpler and
+self-correcting.
 
 **Portability note.** If a future/different tmux version (or a session picker
 that does switch-then-kill) *does* fire `client-session-changed` for the

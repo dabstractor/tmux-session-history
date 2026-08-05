@@ -255,6 +255,21 @@ do_hook() {
     [ "$to" = "$CURRENT" ] && { S "$(H mode)" ""; return; }
 
     from="$CURRENT"
+    # If the session we're leaving no longer exists, this switch was FORCED by
+    # tmux relocating us because our current session just CLOSED — its last
+    # window/pane was killed, kill-session ran, or a session picker did a
+    # switch-then-kill. Such a landing must NOT reorder the timeline (no
+    # move_to_tip) and must NOT promote the relevance list: we simply move the
+    # cursor to the landing session's EXISTING position so the forward history
+    # survives (closing the middle must leave the top reachable via forward).
+    # This also makes the outcome identical whether prune or this hook acquires
+    # the lock first. (Relies on CURRENT being accurate, which the flock
+    # serialization guarantees.)
+    if ! session_exists "$from"; then
+        if i="$(index_of "$to")"; then IDX="$i"
+        else HIST+=("$to"); IDX=$(( ${#HIST[@]} - 1 )); fi   # rare: landing not yet in history
+        CURRENT="$to"; S "$(H mode)" ""; save; return
+    fi
     case "$MODE" in
         walk:*)   mt="walk"   ;;
         toggle:*) mt="toggle" ;;
@@ -507,12 +522,18 @@ prune_dead() {
         # attached session is momentarily unresolvable (or still reports the
         # just-closed session). Never blank CURRENT in that case — a blank
         # CURRENT makes the next client-session-changed hook think the engine
-        # is uninitialized and wipe the timeline. Fall back to the tip of the
-        # (now-pruned) history; the landing hook / reconcile corrects it.
+        # is uninitialized and wipe the timeline. Fall back to the session at
+        # the CURSOR (where the user just was) and its nearest live neighbors —
+        # NOT the timeline tip: landing on the tip would make the subsequent
+        # landing client-session-changed reorder it ahead of the forward
+        # history, stranding the old top behind the cursor.
         if [ -z "$landed" ] || ! session_exists "$landed" ]; then
             landed=""
-            for (( i=${#HIST[@]}-1; i>=0; i-- )); do
-                session_exists "${HIST[$i]}" && { landed="${HIST[$i]}"; break; }
+            local lo hi
+            for (( j=0; j<${#HIST[@]}; j++ )); do
+                lo=$(( IDX - j )); hi=$(( IDX + j ))
+                if [ "$hi" -lt "${#HIST[@]}" ] && session_exists "${HIST[$hi]}"; then landed="${HIST[$hi]}"; break; fi
+                if [ "$lo" -ge 0 ] && session_exists "${HIST[$lo]}"; then landed="${HIST[$lo]}"; break; fi
             done
         fi
         if [ -n "$landed" ]; then
