@@ -156,21 +156,21 @@
           "type": "Milestone",
           "id": "P1.M2",
           "title": "Entry Point Update (session_history.tmux)",
-          "status": "Planned",
+          "status": "Researching",
           "description": "Update the plugin entry point to change the dwell default to 30000 ms, remove the focused-activity detection comment block, and rewrite the bootstrap comment to drop poller rationale.",
           "tasks": [
             {
               "type": "Task",
               "id": "P1.M2.T1",
               "title": "Update Entry Point — Dwell Default & Remove Activity References",
-              "status": "Planned",
+              "status": "Researching",
               "description": "Align session_history.tmux with the PRD: change the dwell-ms default from 10000 to 30000, delete the 'focused-activity detection' comment block, and rewrite the bootstrap comment to explain init runs last for state-seeding (not poller-starting) reasons.",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M2.T1.S1",
                   "title": "Change dwell default in session_history.tmux from 10000 to 30000",
-                  "status": "Researching",
+                  "status": "Complete",
                   "story_points": 1,
                   "dependencies": [],
                   "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 2b and GAP 8a. session_history.tmux:55 currently sets: 'tmux set-option -g \\'@session-history-dwell-ms\\' 10000'. PRD §15 specifies the default as 30000. PRD §16 says: 'The entry script also defaults @session-history-dwell-ms to 30000 if unset.'\n2. INPUT: session_history.tmux with dwell default set to 10000 at ~line 55.\n3. LOGIC: Change '10000' to '30000' in the set-option line. This must agree with the engine's dwell_ms() fallback (P1.M1.T3.S1) and the README Options table (P1.M3.T2.S1).\n4. OUTPUT: session_history.tmux defaults @session-history-dwell-ms to 30000, matching PRD §15/§16.\n5. DOCS: none — this is a code/config default change; the README update is handled separately in P1.M3.",
@@ -184,7 +184,7 @@
                   "type": "Subtask",
                   "id": "P1.M2.T1.S2",
                   "title": "Remove focused-activity comment block and rewrite bootstrap comment",
-                  "status": "Planned",
+                  "status": "Researching",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1"
