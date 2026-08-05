@@ -23,10 +23,14 @@ get_tmux_option() {
     [ -n "$value" ] && echo "$value" || echo "$2"
 }
 
-# All three hooks run SYNCHRONOUSLY (no -b). Each does a read-modify-write on the
-# @session-history-* options, so an async (-b) hook would race the navigation
-# hook and clobber current/idx/mode via a lost update, corrupting navigation.
-# Synchronous hooks serialize through tmux's command loop -> no lost updates.
+# NOTE: a `run-shell` inside a tmux hook is ASYNCHRONOUS regardless of -b —
+# the triggering command returns immediately and the hook's shell runs afterward
+# (verified on tmux 3.6a). So `session-closed` (prune) and `client-session-
+# changed` (hook) can fire concurrently when a close relocates the client. The
+# engine therefore serializes every mutating command with an exclusive flock
+# (see scripts/session_history.sh: lock/unlock), making the read-modify-write on
+# the @session-history-* options mutually exclusive and race-free even though
+# tmux runs the run-shells asynchronously.
 # client-session-changed is the spine: every switch flows through it, which is
 # how we tell WALKS (back/forward) and TOGGLES from NAVIGATIONS (pick/sessionx/
 # manual). session-closed prunes dead entries from both the timeline and the

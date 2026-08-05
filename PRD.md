@@ -355,11 +355,13 @@ because if the landing hook does not fire (as on 3.6a), the flag would linger
 and corrupt the *next* real navigation. Relying on tmux not firing the landing
 hook is both simpler and avoids that footgun.
 
-**Portability note.** If a future/different tmux version *does* fire
-`client-session-changed` for the auto-landing, the landing would be promoted
-(NAVIGATION branch). That is a minor deviation from the spec, affecting only
-the rare close-current case, and would require revisiting. On 3.6a it does not
-occur.
+**Portability note.** If a future/different tmux version (or a session picker
+that does switch-then-kill) *does* fire `client-session-changed` for the
+landing, prune and hook now run concurrently. This is no longer a correctness
+hazard: every mutating command is serialized by an exclusive flock (§13), so
+the landing is promoted only if it genuinely wins the lock after prune, and the
+timeline is never corrupted either way. The close-current case therefore cannot
+truncate or wipe the stack on any tmux version.
 
 ---
 
@@ -382,22 +384,45 @@ dwell floor — fully cover "sessions I'm actively using."
 
 ## 13. Concurrency & race safety
 
-- The three hooks (`client-session-changed`, `session-closed`, `session-created`)
-  are wired **without** `-b`, so they run **synchronously**, serialized through
-  tmux's single-threaded command loop. The hook's load → modify → save on the
-  critical state (`hist`/`idx`/`current`/`mode`/`tlist`) is therefore race-free
-  with respect to other hooks.
+- **Hooks are ASYNCHRONOUS, not synchronous.** A `run-shell` inside a tmux hook
+  runs *after* the triggering command returns, regardless of `-b` (verified on
+  tmux 3.6a). So `session-closed` (prune) and `client-session-changed` (hook)
+  can execute **concurrently** whenever a close also relocates the client —
+  closing the focused session, or any switch-then-kill such as a session picker
+  deleting a session. Their load → modify → save on the critical state
+  (`hist`/`idx`/`current`/`mode`/`tlist`) would otherwise interleave: a hook that
+  loaded stale state can save **last** and clobber prune's removal of the
+  just-closed session, so dead sessions **accumulate** in the timeline; when a
+  prune finally lands unclobbered it mass-removes them, which presents as the
+  timeline being truncated or "wiped."
+- **Serialization.** Every mutating command (`hook`, `prune`, `maintain`,
+  `init`, `back`, `forward`, `toggle`, `pick`, `dwell`, `activity`, `reset`)
+  takes an exclusive `flock` on a stable file for its whole critical section
+  (`lock`/`unlock` in the engine). The critical sections are thus mutually
+  exclusive no matter how tmux schedules the async run-shells, so a close now
+  removes exactly the closed session and leaves the rest of the stack
+  untouched. Each section is a few tens of ms; keypresses are ~150 ms apart and
+  the poller fires only every ~0.5 s, so lock contention is imperceptible. The
+  lock auto-releases if a command dies (the fd closes), so it can never be held
+  stale.
+- **Single consistent liveness snapshot.** Each locked section loads one
+  `list-sessions` snapshot into an associative array and keys all
+  `session_exists` checks off it (1 tmux call instead of N, and atomic — no
+  session can appear/disappear mid-scan). This is what makes pruning exact: a
+  live session is never dropped and a dead one is never missed.
 - The primitives (`do_back`/`do_forward`/`do_toggle`) set the `mode` flag, then
-  call `switch-client`, which fires the synchronous hook before returning. So
-  by the time `switch-client` returns, the engine state reflects the switch.
-- **Dwell is the sole async path** and is sandboxed to `tlist`-only mutation
-  (§8). It cannot corrupt `hist`/`idx`/`current`/`mode`.
+  call `switch-client` (under the lock); the landing hook fires asynchronously
+  afterward and acquires the lock in its own process. `mode` is set before the
+  switch and read under the lock, so it is never lost.
+- **Dwell and activity** (the async relevance paths) touch ONLY `tlist` AND now
+  take the lock too, so they are fully serialized and can never corrupt
+  `hist`/`idx`/`current`/`mode`.
 - **Caveat (tmux command queuing).** A `tmux` command issued *from within* a
-  synchronous hook's `run-shell` (e.g. `prune_dead`'s `save`) is deferred until
-  after the triggering tmux command returns. So an external observer that reads
-  state immediately after `kill-session` may see pre-prune state for a few
-  milliseconds. This is harmless to users and to the engine; tests settle with
-  a tiny sleep after such operations.
+  hook's `run-shell` is deferred until after the triggering tmux command
+  returns. An external observer that reads state immediately after
+  `kill-session` may see pre-prune state for a few milliseconds. This is
+  harmless to users and to the engine; tests settle with a tiny sleep after
+  such operations.
 
 ---
 

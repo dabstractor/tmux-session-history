@@ -74,15 +74,20 @@
 #   IMPORTANT: the `run-shell` in a tmux hook is ASYNCHRONOUS — the triggering
 #   command (e.g. switch-client) returns immediately and the hook's shell runs
 #   afterward (verified on tmux 3.6a; `-b` makes no difference inside a hook).
-#   So the read-modify-write on hist/idx/current/mode/tlist in do_hook is NOT
-#   strictly serialized. In practice this is fine because a hook finishes in
-#   ~tens of ms, far under the ~150-250 ms between human keypresses, so each
-#   switch's hook completes before the next keypress arrives and navigation is
-#   consistent for real use. (Machine-speed bursts of switch-client can outrun a
-#   hook and collapse into a single step — a known, accepted limitation.)
-#   There are TWO further async best-effort paths, both of which touch ONLY
-#   @session-history-tlist (never hist/idx/current/mode), so a lost update there
-#   merely nudges the relevance list and self-heals on the next navigation:
+#   So the read-modify-write on hist/idx/current/mode/tlist is NOT serialized by
+#   tmux. A close that also relocates the client fires prune AND hook at once
+#   (closing the focused session, or any switch-then-kill such as a session
+#   picker deleting a session), and a hook that loaded stale state can save LAST
+#   and clobber prune's removal of the just-closed session — dead sessions then
+#   ACCUMULATE in the timeline, and a later prune that finally lands unclobbered
+#   mass-removes them, which looks like the timeline was truncated or wiped. We
+#   therefore wrap EVERY mutating command in an exclusive flock (see lock/
+#   unlock below) so the critical sections are mutually exclusive regardless of
+#   how tmux schedules the async run-shells. (Machine-speed bursts of
+#   switch-client can still collapse into a single step — a known, accepted
+#   limitation — but they can no longer corrupt the timeline.)
+#   The TWO further async paths (dwell, activity) touch ONLY @session-history-
+#   tlist, AND now also take the lock, so they are fully serialized as well:
 #     • dwell — the hook arms a tmux-managed background `run-shell -b` sleep that
 #       fires `dwell <session>`; it self-guards ("am I still current?").
 #     • activity — fired by the background poller (do_poller) when the attached
@@ -109,9 +114,40 @@ H() { printf '%s-%s\n' "$P" "$1"; }   # H hist -> @session-history-hist
 
 SELF="${BASH_SOURCE[0]:-$0}"
 
+# --- concurrency: serialize the critical sections ----------------------------
+# A `run-shell` inside a tmux hook is ASYNCHRONOUS (see the header note): the
+# triggering command returns immediately and the hook's shell runs afterward, so
+# `session-closed` (prune) and `client-session-changed` (hook) can run
+# concurrently whenever a close also relocates the client. Every mutating
+# command below therefore takes an exclusive flock on a stable file for its
+# whole critical section, so the read-modify-writes cannot interleave. Each
+# section is a few tens of ms; keypresses are ~150 ms apart and the poller fires
+# only every ~0.5 s, so contention is imperceptible. The lock auto-releases if a
+# command dies (fd closes / process exits), so it can never be held stale.
+LOCK_FILE="${SHT_LOCK:-${TMPDIR:-/tmp}/tmux-session-history.lock}"
+lock()   { exec 9>"$LOCK_FILE"; flock 9; }   # blocks until exclusive lock acquired
+unlock() { exec 9>&-; }                        # closing fd 9 releases the lock
+
+# A single consistent snapshot of the live session names, refreshed once per
+# locked critical section. prune/cap key off this instead of one `has-session`
+# fork per entry: it is both far faster (1 tmux call vs N) and atomic — no
+# session can appear or disappear mid-scan — which is what makes pruning exact:
+# a live session is never dropped and a dead one is never missed.
+declare -A ALIVE=()
+load_alive() {
+    ALIVE=()
+    local s
+    while IFS= read -r s; do [ -n "$s" ] && ALIVE["$s"]=1; done \
+        < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+}
+
 G() { tmux show-options -gv "$1" 2>/dev/null; }
 S() { tmux set-option -g "$1" "$2"; }
-session_exists() { tmux has-session -t "$1" 2>/dev/null; }
+# Uses the snapshot when one has been loaded this critical section, else forks.
+session_exists() {
+    if [ "${#ALIVE[@]}" -gt 0 ]; then [ "${ALIVE[$1]:-}" = 1 ]
+    else tmux has-session -t "$1" 2>/dev/null; fi
+}
 attached_session() { tmux display-message -p '#{session_name}' 2>/dev/null; }
 toggle_enabled() { [ "$(G "$(H toggle-enabled)")" = "on" ]; }
 # user-facing dwell threshold in ms; 0 disables dwell entirely
@@ -332,7 +368,7 @@ do_poller() {
         c="${line%% *}"; s="${line#* }"
         if [ -n "$s" ] && [ -n "$c" ]; then
             if [ -n "$last_s" ] && [ "$s" = "$last_s" ] && [ "$c" != "$last_c" ]; then
-                do_activity "$s"                      # same session, input advanced -> work
+                lock; load_alive; do_activity "$s"; unlock    # serialized w/ hooks
             fi
             last_s="$s"; last_c="$c"
         fi
@@ -420,13 +456,17 @@ do_forward() {
 
 # --- fzf picker over live history (most-recent-first) ------------------------
 do_pick() {
-    load; reconcile "${1:-}"
+    # Read state and build the candidate list under the lock, then RELEASE
+    # before the interactive fzf so a picker left open can't block every other
+    # command. The eventual switch fires the (locked) hook.
+    lock; load_alive; load; reconcile "${1:-}"
     local cur="$CURRENT" items="" i s sel popup use_popup
     for (( i=${#HIST[@]}-1; i>=0; i-- )); do
         s="${HIST[$i]}"; [ "$s" = "$cur" ] && continue
         session_exists "$s" || continue
         items+="$s"$'\n'
     done
+    unlock
     [ -n "$items" ] || { tmux display-message "session-history: no history yet"; return 0; }
 
     popup="$(G "@session-history-popup")"; [ -z "$popup" ] && popup=on
@@ -486,7 +526,8 @@ prune_dead() {
 # Ceiling = number of sessions currently open. Trim oldest stragglers from each
 # list down to the open-session count, never dropping the live current session.
 live_session_count() {
-    tmux list-sessions -F '#{session_name}' 2>/dev/null | wc -l
+    if [ "${#ALIVE[@]}" -gt 0 ]; then echo "${#ALIVE[@]}"
+    else tmux list-sessions -F '#{session_name}' 2>/dev/null | wc -l; fi
 }
 
 cap_to_live() {
@@ -568,18 +609,21 @@ do_reset() {
 
 cmd="${1:-}"; to="${2:-}"
 case "$cmd" in
-    init)      do_init ;;
-    hook)      load; do_hook "$to" ;;
-    dwell)     do_dwell "$to" ;;
-    activity)  do_activity "$to" ;;
-    poller)    do_poller ;;
-    prune)     load; prune_dead; save ;;
-    maintain)  do_maintain ;;
-    toggle)    do_toggle "$to" ;;
-    back)      do_back "$to" ;;
-    forward)   do_forward "$to" ;;
-    pick)      do_pick "$to" ;;
-    status)    do_status ;;
-    reset)     do_reset ;;
+    # Every mutating command holds the exclusive lock for its whole critical
+    # section, so concurrent async hooks (a close that also relocates the client
+    # fires prune + hook at once) cannot interleave their read-modify-writes.
+    init)      lock; load_alive; do_init; unlock ;;
+    hook)      lock; load_alive; load; do_hook "$to"; unlock ;;
+    dwell)     lock; load_alive; do_dwell "$to"; unlock ;;
+    activity)  lock; load_alive; do_activity "$to"; unlock ;;
+    poller)    do_poller ;;           # long-running; locks per fire of do_activity
+    prune)     lock; load_alive; load; prune_dead; save; unlock ;;
+    maintain)  lock; load_alive; do_maintain; unlock ;;
+    toggle)    lock; load_alive; do_toggle "$to"; unlock ;;
+    back)      lock; load_alive; do_back "$to"; unlock ;;
+    forward)   lock; load_alive; do_forward "$to"; unlock ;;
+    pick)      do_pick "$to" ;;        # self-manages the lock (releases before fzf)
+    status)    do_status ;;            # read-only; no lock
+    reset)     lock; do_reset; unlock ;;
     *) echo "Usage: $0 {init|hook|dwell|activity|poller|prune|maintain|toggle|back|forward|pick|status|reset} [session]" >&2; exit 1 ;;
 esac
