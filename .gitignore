@@ -10,5 +10,9 @@
 *.log
 tmp/
 
+# Environment
+.env
+.env.*
+
 # Agent harness artifacts
 .pi-subagents/
