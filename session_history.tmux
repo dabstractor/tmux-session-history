@@ -67,20 +67,11 @@ fi
 [ -n "$forward_key" ] && tmux bind-key "$forward_key" run-shell "${SCRIPT} forward \"#{session_name}\""
 [ -n "$pick_key" ]    && tmux bind-key "$pick_key"    run-shell "${SCRIPT} pick    \"#{session_name}\""
 
-# --- focused-activity detection (only with toggle bound) --------------------
-# The relevance list's PRIMARY signal is input in the session you are viewing —
-# typing, pane/window switches, or any tmux command. tmux's alert-activity cannot
-# see the focused window, so the engine watches the attached client's
-# client_activity timestamp instead (see scripts/session_history.sh). The
-# poller promotes the current session whenever that timestamp advances while the
-# session stays the same; no extra hook is needed here. With toggle unbound the
-# poller is never started: no resident processes.
-
-# Bootstrap the engine LAST, after every option/hook/key above is in place —
-# do_init reads @session-history-toggle-enabled (set by the toggle block) to
-# decide whether to start the focused-activity poller, so it must run after that
-# flag is set (calling it earlier raced the async run-shell ahead of the toggle
-# block and left the poller unset on reload).
+# Bootstrap the engine LAST, after every option/hook/key above is in place.
+# do_init seeds the initial state (the current/attached session) into the
+# history options when they are empty — a one-shot, idempotent seed that must
+# run after the full configuration is wired (hooks, keys, options). It starts
+# no background processes, so its only requirement is that ordering.
 tmux run-shell "${SCRIPT} init"
 
 # The bind lines above short-circuit to false (exit 1) when their key is empty;

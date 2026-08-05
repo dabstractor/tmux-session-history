@@ -106,26 +106,19 @@ most-recently-used sessions oscillate.
 A session becomes relevant — is promoted to the front of the relevance list —
 when you either:
 
-- **type, switch panes/windows, or run any tmux command in it while viewing it** —
-  this is the *primary* signal. The moment you're working in the session in
-  front of you, it becomes the toggle target, within about half a second to a
-  second. (tmux's built-in `monitor-activity` can't see this — it only notices
-  *background* windows — so the plugin instead watches the attached client's
-  activity timestamp, which advances on every keystroke you send: characters
-  typed into the shell, pane/window switches, and tmux commands alike.)
 - **select it directly** — via toggle, pick, tmux-sessionx, or a manual
   `switch-client`. The session you go to becomes relevant immediately.
 - **dwell on it** — reach it by walking (back/forward) and stay longer than
-  `@session-history-dwell-ms` (default 30 s) *without* typing/interacting. This is
-  the fallback for silent presence (reading, thinking).
+  `@session-history-dwell-ms` (default 30 s). This is the fallback for silent
+  presence (reading, thinking): a session you only browsed to is not relevant
+  until you've actually stayed on it.
 
-Walking through a session does **not** make it relevant by itself. So if you're working
-in session A, walk the history back through several sessions to land on B, and
-press toggle, you flip back to A — not to the session adjacent to B — because A
-is what you were using and the walk never promoted the ones in between. But the
-instant you produce output in a walked-to session, activity promotes it
-immediately, so the dwell timer never gets in the way of active use. Press
-toggle again and you're back on B (once B itself is relevant).
+Walking through a session does **not** make it relevant by itself. So if you're
+working in session A, walk the history back through several sessions to land on
+B, and press toggle, you flip back to A — not to the session adjacent to B —
+because A is what you were using and the walk never promoted the ones in
+between. If you instead stay on that walked-to session B long enough, dwell
+promotes it; press toggle and you're now oscillating between A and B.
 
 **How activity detection works.** When toggle is bound the plugin watches the
 attached client's `client_activity` timestamp. tmux advances it on every
