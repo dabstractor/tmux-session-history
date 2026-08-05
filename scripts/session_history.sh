@@ -550,8 +550,6 @@ case "$cmd" in
     init)      lock; load_alive; do_init; unlock ;;
     hook)      lock; load_alive; load; do_hook "$to"; unlock ;;
     dwell)     lock; load_alive; do_dwell "$to"; unlock ;;
-    activity)  lock; load_alive; do_activity "$to"; unlock ;;
-    poller)    do_poller ;;           # long-running; locks per fire of do_activity
     prune)     lock; load_alive; load; prune_dead; save; unlock ;;
     maintain)  lock; load_alive; do_maintain; unlock ;;
     toggle)    lock; load_alive; do_toggle "$to"; unlock ;;
@@ -560,5 +558,5 @@ case "$cmd" in
     pick)      do_pick "$to" ;;        # self-manages the lock (releases before fzf)
     status)    do_status ;;            # read-only; no lock
     reset)     lock; do_reset; unlock ;;
-    *) echo "Usage: $0 {init|hook|dwell|activity|poller|prune|maintain|toggle|back|forward|pick|status|reset} [session]" >&2; exit 1 ;;
+    *) echo "Usage: $0 {init|hook|dwell|prune|maintain|toggle|back|forward|pick|status|reset} [session]" >&2; exit 1 ;;
 esac
