@@ -506,18 +506,13 @@ do_init() {
             CURRENT="$s"; save
         fi
     fi
-    # Legacy cleanup: older versions kept a pipe-pane on the focused pane,
-    # tracked in @session-history-piped-pane. Close just THAT pane's pipe (if
-    # any) so its reader exits; the current design uses no pipes. Targeted so we
-    # never close another plugin's pipe-pane.
-    local legacy; legacy="$(G "$(H piped-pane)" 2>/dev/null)"
-    [ -n "$legacy" ] && tmux pipe-pane -t "$legacy" "" 2>/dev/null
-    S "$(H piped-pane)" "" 2>/dev/null
-    # Start the focused-activity poller: it watches the attached client's
-    # client_activity timestamp and promotes the current session on input.
-    # Reload-safe — do_start_poller kills any previous instance first. No-op
-    # without a client (the poller waits for one to attach).
-    do_start_poller
+    # One-shot migration guard: an older version may have left a poller process
+    # running, tracked in @session-history-poller-pid. That machinery is gone
+    # now, so kill the stale PID once (if any) and clear the option. Self-
+    # cleaning: once the option is empty, subsequent inits skip this entirely.
+    local old_pid; old_pid="$(G "$(H poller-pid)" 2>/dev/null)"
+    [ -n "$old_pid" ] && kill "$old_pid" 2>/dev/null
+    S "$(H poller-pid)" "" 2>/dev/null
 }
 
 do_status() {
