@@ -11,7 +11,7 @@
           "type": "Milestone",
           "id": "P1.M1",
           "title": "Engine Code Refactor (scripts/session_history.sh)",
-          "status": "Ready",
+          "status": "Complete",
           "description": "Remove the activity-detection subsystem from the engine script, clean do_init of poller/pipe-pane legacy code, update the dwell default to 30000 ms, and rewrite the header comments to reflect the PRD §6 selection+dwell-only relevance model and the PRD §13 concurrency model (dwell is now the only async path).",
           "tasks": [
             {
@@ -58,14 +58,14 @@
               "type": "Task",
               "id": "P1.M1.T2",
               "title": "Clean do_init() — Remove Poller Bootstrap & Pipe-Pane Legacy",
-              "status": "Ready",
+              "status": "Complete",
               "description": "Strip do_init of the pipe-pane legacy cleanup block and the do_start_poller() call so it matches PRD §17 ('Seed initial state if empty'). Add a one-shot stale-poller migration guard so upgrading users don't get orphaned poller processes.",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M1.T2.S1",
                   "title": "Remove pipe-pane legacy cleanup and poller start; add stale-poller migration guard",
-                  "status": "Ready",
+                  "status": "Complete",
                   "story_points": 2,
                   "dependencies": [
                     "P1.M1.T1.S1"
@@ -205,7 +205,7 @@
           "type": "Milestone",
           "id": "P1.M3",
           "title": "Documentation Sync (README.md)",
-          "status": "Researching",
+          "status": "Ready",
           "description": "Rewrite the README to describe the PRD's selection+dwell-only relevance model: remove all activity-detection references, update the dwell default to 30000, and ensure internal consistency. Per §5 of the SOW, per-section doc updates ride with the work (Mode A), and a final changeset-level sweep task (Mode B) verifies cross-file consistency.",
           "tasks": [
             {
@@ -304,14 +304,14 @@
               "type": "Task",
               "id": "P1.M3.T3",
               "title": "Sync changeset-level documentation",
-              "status": "Researching",
+              "status": "Ready",
               "description": "Final changeset-level documentation sweep (Mode B per SOW §5). Verify that README.md, scripts/session_history.sh header comments, and session_history.tmux comments are all internally consistent with each other and with the PRD after all implementing subtasks are complete. This is the catch-all that prevents a coherent delta from shipping with stale cross-references.",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M3.T3.S1",
                   "title": "Verify cross-file documentation consistency (README ↔ code ↔ PRD)",
-                  "status": "Researching",
+                  "status": "Ready",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1",
