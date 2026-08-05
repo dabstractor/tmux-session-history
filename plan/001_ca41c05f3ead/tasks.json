@@ -4,7 +4,7 @@
       "type": "Phase",
       "id": "P1",
       "title": "Align Implementation to PRD Spec — Selection + Dwell Relevance Model",
-      "status": "Ready",
+      "status": "Planned",
       "description": "The PRD (PRD.md) is a reference spec describing the desired final state of the tmux-session-history engine. The current implementation has diverged: it ships a client_activity-polling activity-detection subsystem that the PRD explicitly removes (PRD §12: 'It is therefore not wired. Relevance comes from selection and dwell only.'). This phase is a simplification refactor: strip the activity-detection machinery (do_activity, do_poller, do_start_poller, the activity/poller subcommands, @session-history-poller-pid, @session-history-piped-pane), raise the dwell default from 10000 ms to 30000 ms (the coupled compensating change — once focused-activity is gone, dwell becomes the only silent-presence signal), and update all code comments and user-facing documentation to match. The reactive engine core (do_hook, do_dwell, do_toggle, do_back/forward, do_pick, prune_dead, cap_to_live) is already PRD-compliant and must NOT be modified. See plan/001_ca41c05f3ead/architecture/system_context.md for the full context.",
       "milestones": [
         {
@@ -18,28 +18,39 @@
               "type": "Task",
               "id": "P1.M1.T1",
               "title": "Remove Activity Detection Functions & Subcommands",
-              "status": "Planned",
+              "status": "Researching",
               "description": "Delete the three activity-detection functions (do_activity, do_poller, do_start_poller) and remove their case-dispatch branches and Usage-string tokens so the subcommand set matches PRD §17 exactly.",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M1.T1.S1",
                   "title": "Delete do_activity(), do_poller(), and do_start_poller() functions",
-                  "status": "Planned",
+                  "status": "Complete",
                   "story_points": 1,
                   "dependencies": [],
-                  "prd_selectors": ["h2.12", "h2.6", "h2.17", "h2.13", "h3.10"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 1. The current engine (scripts/session_history.sh) implements a client_activity-polling activity promoter as a THIRD relevance path. PRD §12 explicitly states: 'It is therefore not wired. Relevance comes from selection and dwell only.' PRD §6 lists exactly two promotion causes: (1) direct selection, (2) dwell. The functions to delete are: do_activity() (~lines 320-341 incl. divider comment), do_poller() (~lines 342-395 incl. divider comment + extensive comment block about client_activity polling), do_start_poller() (~lines 396-405 incl. comment). The @session-history-poller-pid option is referenced inside do_poller (lines ~369, ~393) and do_start_poller (line ~401) — these references disappear with the functions.\n2. INPUT: The file scripts/session_history.sh in its current state, with the three functions present and the rest of the engine (do_hook, do_dwell, etc.) already PRD-compliant.\n3. LOGIC: Delete the entire blocks for do_activity(), do_poller(), and do_start_poller() including their '# ---' divider comment headers and trailing blank lines. After deletion, run 'grep -n activity scripts/session_history.sh' and 'grep -n poller scripts/session_history.sh' to verify the ONLY remaining references are: (a) the case-dispatch branches (handled in S2) and (b) the do_init poller-start call (handled in T2). Do NOT modify do_hook, do_dwell, or any other function — they are already compliant.\n4. OUTPUT: scripts/session_history.sh with do_activity/do_poller/do_start_poller removed. The engine no longer contains any client_activity polling code.\n5. DOCS: none — the header comment rewrite is handled in P1.M1.T4 (Mode A, separate task). This subtask is pure code deletion."
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 1. The current engine (scripts/session_history.sh) implements a client_activity-polling activity promoter as a THIRD relevance path. PRD §12 explicitly states: 'It is therefore not wired. Relevance comes from selection and dwell only.' PRD §6 lists exactly two promotion causes: (1) direct selection, (2) dwell. The functions to delete are: do_activity() (~lines 320-341 incl. divider comment), do_poller() (~lines 342-395 incl. divider comment + extensive comment block about client_activity polling), do_start_poller() (~lines 396-405 incl. comment). The @session-history-poller-pid option is referenced inside do_poller (lines ~369, ~393) and do_start_poller (line ~401) — these references disappear with the functions.\n2. INPUT: The file scripts/session_history.sh in its current state, with the three functions present and the rest of the engine (do_hook, do_dwell, etc.) already PRD-compliant.\n3. LOGIC: Delete the entire blocks for do_activity(), do_poller(), and do_start_poller() including their '# ---' divider comment headers and trailing blank lines. After deletion, run 'grep -n activity scripts/session_history.sh' and 'grep -n poller scripts/session_history.sh' to verify the ONLY remaining references are: (a) the case-dispatch branches (handled in S2) and (b) the do_init poller-start call (handled in T2). Do NOT modify do_hook, do_dwell, or any other function — they are already compliant.\n4. OUTPUT: scripts/session_history.sh with do_activity/do_poller/do_start_poller removed. The engine no longer contains any client_activity polling code.\n5. DOCS: none — the header comment rewrite is handled in P1.M1.T4 (Mode A, separate task). This subtask is pure code deletion.",
+                  "prd_selectors": [
+                    "h2.12",
+                    "h2.6",
+                    "h2.17",
+                    "h2.13",
+                    "h3.10"
+                  ]
                 },
                 {
                   "type": "Subtask",
                   "id": "P1.M1.T1.S2",
                   "title": "Remove activity/poller case-dispatch branches and update Usage string",
-                  "status": "Planned",
+                  "status": "Researching",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T1.S1"],
-                  "prd_selectors": ["h2.17", "h2.12"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 3. PRD §17 lists exactly 11 subcommands: init, hook, dwell, prune, maintain, toggle, back, forward, pick, status, reset. The current case dispatch (bottom of scripts/session_history.sh, ~lines 635-650) has two extra branches: 'activity)  lock; load_alive; do_activity \"$to\"; unlock ;;' (~line 639) and 'poller)    do_poller ;;' (~line 640). The Usage string (~line 649) includes 'activity|poller|' tokens.\n2. INPUT: scripts/session_history.sh after S1 has deleted the function bodies. The case branches still reference the now-deleted functions, so they would fail at runtime.\n3. LOGIC: Delete the 'activity)' case branch line and the 'poller)' case branch line. Edit the Usage string to remove 'activity|poller|' so it reads exactly: '{init|hook|dwell|prune|maintain|toggle|back|forward|pick|status|reset}'. Verify the resulting case dispatch matches PRD §17's 11-command list.\n4. OUTPUT: The case dispatch and Usage string match PRD §17 exactly. No runtime path can invoke the deleted functions.\n5. DOCS: none — no user-facing/config/API surface change beyond the code itself."
+                  "dependencies": [
+                    "P1.M1.T1.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 3. PRD §17 lists exactly 11 subcommands: init, hook, dwell, prune, maintain, toggle, back, forward, pick, status, reset. The current case dispatch (bottom of scripts/session_history.sh, ~lines 635-650) has two extra branches: 'activity)  lock; load_alive; do_activity \"$to\"; unlock ;;' (~line 639) and 'poller)    do_poller ;;' (~line 640). The Usage string (~line 649) includes 'activity|poller|' tokens.\n2. INPUT: scripts/session_history.sh after S1 has deleted the function bodies. The case branches still reference the now-deleted functions, so they would fail at runtime.\n3. LOGIC: Delete the 'activity)' case branch line and the 'poller)' case branch line. Edit the Usage string to remove 'activity|poller|' so it reads exactly: '{init|hook|dwell|prune|maintain|toggle|back|forward|pick|status|reset}'. Verify the resulting case dispatch matches PRD §17's 11-command list.\n4. OUTPUT: The case dispatch and Usage string match PRD §17 exactly. No runtime path can invoke the deleted functions.\n5. DOCS: none — no user-facing/config/API surface change beyond the code itself.",
+                  "prd_selectors": [
+                    "h2.17",
+                    "h2.12"
+                  ]
                 }
               ]
             },
@@ -56,9 +67,16 @@
                   "title": "Remove pipe-pane legacy cleanup and poller start; add stale-poller migration guard",
                   "status": "Planned",
                   "story_points": 2,
-                  "dependencies": ["P1.M1.T1.S1"],
-                  "prd_selectors": ["h2.17", "h2.12", "h2.9", "h2.13"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 4b and GAP 7. do_init() (~lines 577-607) has three blocks after the seed logic: (1) seed logic (~lines 578-594) — COMPLIANT, KEEP UNTOUCHED; (2) pipe-pane legacy cleanup (~lines 595-601): reads @session-history-piped-pane, closes that pane's pipe via 'tmux pipe-pane -t ...', clears the option — DELETE (PRD §12 rejects pipe-pane plumbing; @session-history-piped-pane is not in PRD §3); (3) poller start (~lines 602-606): comment block + 'do_start_poller' call — DELETE (do_start_poller was removed in T1.S1; calling it would be a runtime error). CRITICAL MIGRATION ISSUE: after removing do_start_poller, a previously-started poller process (tracked in @session-history-poller-pid from a prior version) will keep running indefinitely because the reload no longer kills it. This must be handled.\n2. INPUT: scripts/session_history.sh after T1.S1 has removed do_start_poller/do_poller/do_activity function bodies. do_init currently calls do_start_poller (which no longer exists).\n3. LOGIC: (a) Delete the pipe-pane legacy cleanup block entirely (~lines 595-601, including the comment '# Legacy cleanup: ...'). (b) Replace the poller-start block (~lines 602-606) with a one-shot migration guard that runs BEFORE the existing save/return: read the old @session-history-poller-pid option value; if non-empty, attempt to kill that PID ('kill \"$old_pid\" 2>/dev/null'), then clear the option ('S \"$(H poller-pid)\" \"\"'). This ensures a user reloading after upgrade has their stale poller cleaned up on the first init. After this guard, do_init should be: seed-if-empty logic (unchanged) + one-shot stale-poller guard. Do NOT add any new background process starts. The guard is self-cleaning — once @session-history-poller-pid is cleared, subsequent inits skip it.\n4. OUTPUT: do_init() matches PRD §17: 'Seed initial state if empty (current/attached session).' plus a defensive one-shot stale-poller migration guard. No new background processes are started.\n5. DOCS: none — do_init is an internal subcommand; no user-facing surface change."
+                  "dependencies": [
+                    "P1.M1.T1.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 4b and GAP 7. do_init() (~lines 577-607) has three blocks after the seed logic: (1) seed logic (~lines 578-594) — COMPLIANT, KEEP UNTOUCHED; (2) pipe-pane legacy cleanup (~lines 595-601): reads @session-history-piped-pane, closes that pane's pipe via 'tmux pipe-pane -t ...', clears the option — DELETE (PRD §12 rejects pipe-pane plumbing; @session-history-piped-pane is not in PRD §3); (3) poller start (~lines 602-606): comment block + 'do_start_poller' call — DELETE (do_start_poller was removed in T1.S1; calling it would be a runtime error). CRITICAL MIGRATION ISSUE: after removing do_start_poller, a previously-started poller process (tracked in @session-history-poller-pid from a prior version) will keep running indefinitely because the reload no longer kills it. This must be handled.\n2. INPUT: scripts/session_history.sh after T1.S1 has removed do_start_poller/do_poller/do_activity function bodies. do_init currently calls do_start_poller (which no longer exists).\n3. LOGIC: (a) Delete the pipe-pane legacy cleanup block entirely (~lines 595-601, including the comment '# Legacy cleanup: ...'). (b) Replace the poller-start block (~lines 602-606) with a one-shot migration guard that runs BEFORE the existing save/return: read the old @session-history-poller-pid option value; if non-empty, attempt to kill that PID ('kill \"$old_pid\" 2>/dev/null'), then clear the option ('S \"$(H poller-pid)\" \"\"'). This ensures a user reloading after upgrade has their stale poller cleaned up on the first init. After this guard, do_init should be: seed-if-empty logic (unchanged) + one-shot stale-poller guard. Do NOT add any new background process starts. The guard is self-cleaning — once @session-history-poller-pid is cleared, subsequent inits skip it.\n4. OUTPUT: do_init() matches PRD §17: 'Seed initial state if empty (current/attached session).' plus a defensive one-shot stale-poller migration guard. No new background processes are started.\n5. DOCS: none — do_init is an internal subcommand; no user-facing surface change.",
+                  "prd_selectors": [
+                    "h2.17",
+                    "h2.12",
+                    "h2.9",
+                    "h2.13"
+                  ]
                 }
               ]
             },
@@ -76,8 +94,13 @@
                   "status": "Planned",
                   "story_points": 1,
                   "dependencies": [],
-                  "prd_selectors": ["h2.15", "h2.8", "h3.8", "h2.14"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 2a. The dwell_ms() function (~line 154) reads @session-history-dwell-ms and falls back to 10000 for empty/non-numeric values. PRD §15 specifies the default as 30000. PRD §14 states: 'Non-numeric dwell-ms → treated as the default (30000).' The function's case statement currently is: 'case \"$d\" in \\'\\'\\'|*[!0-9]*) echo 10000 ;; *) echo \"$d\" ;; esac'.\n2. INPUT: scripts/session_history.sh with dwell_ms() at ~line 154 echoing 10000 as fallback.\n3. LOGIC: Change the fallback value in dwell_ms() from 'echo 10000' to 'echo 30000'. This single change covers the engine's runtime default. The entry-point default (session_history.tmux:55) is handled in P1.M2.T1.S1. The README Options table is handled in P1.M3.T2.S1. All three must agree on 30000.\n4. OUTPUT: dwell_ms() returns 30000 when @session-history-dwell-ms is empty or non-numeric, matching PRD §15.\n5. DOCS: none — the comment on this line ('default 10000 ms') is inside the header comment block rewritten in P1.M1.T4."
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 2a. The dwell_ms() function (~line 154) reads @session-history-dwell-ms and falls back to 10000 for empty/non-numeric values. PRD §15 specifies the default as 30000. PRD §14 states: 'Non-numeric dwell-ms → treated as the default (30000).' The function's case statement currently is: 'case \"$d\" in \\'\\'\\'|*[!0-9]*) echo 10000 ;; *) echo \"$d\" ;; esac'.\n2. INPUT: scripts/session_history.sh with dwell_ms() at ~line 154 echoing 10000 as fallback.\n3. LOGIC: Change the fallback value in dwell_ms() from 'echo 10000' to 'echo 30000'. This single change covers the engine's runtime default. The entry-point default (session_history.tmux:55) is handled in P1.M2.T1.S1. The README Options table is handled in P1.M3.T2.S1. All three must agree on 30000.\n4. OUTPUT: dwell_ms() returns 30000 when @session-history-dwell-ms is empty or non-numeric, matching PRD §15.\n5. DOCS: none — the comment on this line ('default 10000 ms') is inside the header comment block rewritten in P1.M1.T4.",
+                  "prd_selectors": [
+                    "h2.15",
+                    "h2.8",
+                    "h3.8",
+                    "h2.14"
+                  ]
                 }
               ]
             },
@@ -94,9 +117,18 @@
                   "title": "Rewrite 'WHAT MAKES A SESSION RELEVANT' comment section",
                   "status": "Planned",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T1.S1", "P1.M1.T3.S1"],
-                  "prd_selectors": ["h2.6", "h2.2", "h3.1", "h3.2", "h2.12"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 6a. The engine header (~lines 42-66) currently has a 'WHAT MAKES A SESSION RELEVANT?' bullet list that describes 'focused activity (the PRIMARY signal)' as the first and most important promotion cause, with detailed multi-paragraph text about client_activity timestamp polling, and dwell described only as 'the SILENT-PRESENCE fallback'. PRD §6 states authoritatively: a session is promoted by exactly two causes — (1) direct selection (any NAVIGATION or TOGGLE), (2) dwell (reaching by WALK and staying > dwell-ms). 'Walking never promotes.' PRD §12 explains why there is no output-activity signal.\n2. INPUT: scripts/session_history.sh after T1.S1 (functions removed) and T3.S1 (dwell default changed). The header comment at ~lines 42-66 describes the OLD three-cause model.\n3. LOGIC: Rewrite the 'WHAT MAKES A SESSION RELEVANT?' bullet list to match PRD §6 exactly: (1) direct selection — any NAVIGATION (pick/sessionx/manual switch) or TOGGLE promotes the session you land on to #1 immediately; (2) dwell — if you reach a session by a WALK (back/forward) and stay longer than @session-history-dwell-ms (default 30000 ms), it becomes #1. Remove ALL text about client_activity, polling, typing/output detection, alert-activity, pipe-pane, and the 'focused activity (the PRIMARY signal)' framing. State explicitly: 'Walking (back/forward) through a session does NOT promote it by itself.' Update any '(default 10000 ms)' references to '(default 30000 ms)'. The comment should mirror PRD §6's wording.\n4. OUTPUT: The header's relevance-model section accurately describes the PRD §6 two-cause model with no activity-detection references.\n5. DOCS: This IS the doc update (Mode A — inline documentation on the engine file). No separate docs subtask needed for this comment block."
+                  "dependencies": [
+                    "P1.M1.T1.S1",
+                    "P1.M1.T3.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 6a. The engine header (~lines 42-66) currently has a 'WHAT MAKES A SESSION RELEVANT?' bullet list that describes 'focused activity (the PRIMARY signal)' as the first and most important promotion cause, with detailed multi-paragraph text about client_activity timestamp polling, and dwell described only as 'the SILENT-PRESENCE fallback'. PRD §6 states authoritatively: a session is promoted by exactly two causes — (1) direct selection (any NAVIGATION or TOGGLE), (2) dwell (reaching by WALK and staying > dwell-ms). 'Walking never promotes.' PRD §12 explains why there is no output-activity signal.\n2. INPUT: scripts/session_history.sh after T1.S1 (functions removed) and T3.S1 (dwell default changed). The header comment at ~lines 42-66 describes the OLD three-cause model.\n3. LOGIC: Rewrite the 'WHAT MAKES A SESSION RELEVANT?' bullet list to match PRD §6 exactly: (1) direct selection — any NAVIGATION (pick/sessionx/manual switch) or TOGGLE promotes the session you land on to #1 immediately; (2) dwell — if you reach a session by a WALK (back/forward) and stay longer than @session-history-dwell-ms (default 30000 ms), it becomes #1. Remove ALL text about client_activity, polling, typing/output detection, alert-activity, pipe-pane, and the 'focused activity (the PRIMARY signal)' framing. State explicitly: 'Walking (back/forward) through a session does NOT promote it by itself.' Update any '(default 10000 ms)' references to '(default 30000 ms)'. The comment should mirror PRD §6's wording.\n4. OUTPUT: The header's relevance-model section accurately describes the PRD §6 two-cause model with no activity-detection references.\n5. DOCS: This IS the doc update (Mode A — inline documentation on the engine file). No separate docs subtask needed for this comment block.",
+                  "prd_selectors": [
+                    "h2.6",
+                    "h2.2",
+                    "h3.1",
+                    "h3.2",
+                    "h2.12"
+                  ]
                 },
                 {
                   "type": "Subtask",
@@ -104,9 +136,17 @@
                   "title": "Rewrite CONCURRENCY comment section to remove activity/poller references",
                   "status": "Planned",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T1.S1"],
-                  "prd_selectors": ["h2.13", "h2.8", "h3.10", "h3.9", "h3.8"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 6c and GAP 6d. The CONCURRENCY comment block (~lines 89-104) currently names 'activity' as 'the second async path' alongside dwell, references do_poller/do_activity, describes the poller firing '~0.5 s', and calls it 'the only resident process for activity'. PRD §13 describes the concurrency model with dwell as the only async relevance path (there is no activity path). PRD §8 §10 explain why dwell touches only the relevance list. Also at ~line 124, the text 'keypresses are ~150 ms apart and the poller fires only every ~0.5 s' must have the poller clause removed.\n2. INPUT: scripts/session_history.sh after T1.S1 (functions removed). The CONCURRENCY comment block still references the removed do_poller/do_activity.\n3. LOGIC: Rewrite the CONCURRENCY section to match PRD §13: (a) keep the core flock serialization explanation (async hooks, prune+hook concurrency, flock on a stable file); (b) replace 'The TWO further async paths (dwell, activity)' with 'The ONE async path (dwell)' — dwell touches ONLY @session-history-tlist AND takes the lock; (c) remove all sentences about do_poller, do_activity, client_activity, the poller, '~0.5 s', 'the only resident process', and 'focused-activity detection'; (d) at ~line 124, remove 'and the poller fires only every ~0.5 s' from the contention note, keeping 'keypresses are ~150 ms apart, so contention is imperceptible'. The rewritten comment should mirror PRD §13's structure.\n4. OUTPUT: The CONCURRENCY header comment accurately describes the PRD §13 model with dwell as the sole async path and no activity/poller references.\n5. DOCS: This IS the doc update (Mode A — inline documentation on the engine file). No separate docs subtask needed for this comment block."
+                  "dependencies": [
+                    "P1.M1.T1.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 6c and GAP 6d. The CONCURRENCY comment block (~lines 89-104) currently names 'activity' as 'the second async path' alongside dwell, references do_poller/do_activity, describes the poller firing '~0.5 s', and calls it 'the only resident process for activity'. PRD §13 describes the concurrency model with dwell as the only async relevance path (there is no activity path). PRD §8 §10 explain why dwell touches only the relevance list. Also at ~line 124, the text 'keypresses are ~150 ms apart and the poller fires only every ~0.5 s' must have the poller clause removed.\n2. INPUT: scripts/session_history.sh after T1.S1 (functions removed). The CONCURRENCY comment block still references the removed do_poller/do_activity.\n3. LOGIC: Rewrite the CONCURRENCY section to match PRD §13: (a) keep the core flock serialization explanation (async hooks, prune+hook concurrency, flock on a stable file); (b) replace 'The TWO further async paths (dwell, activity)' with 'The ONE async path (dwell)' — dwell touches ONLY @session-history-tlist AND takes the lock; (c) remove all sentences about do_poller, do_activity, client_activity, the poller, '~0.5 s', 'the only resident process', and 'focused-activity detection'; (d) at ~line 124, remove 'and the poller fires only every ~0.5 s' from the contention note, keeping 'keypresses are ~150 ms apart, so contention is imperceptible'. The rewritten comment should mirror PRD §13's structure.\n4. OUTPUT: The CONCURRENCY header comment accurately describes the PRD §13 model with dwell as the sole async path and no activity/poller references.\n5. DOCS: This IS the doc update (Mode A — inline documentation on the engine file). No separate docs subtask needed for this comment block.",
+                  "prd_selectors": [
+                    "h2.13",
+                    "h2.8",
+                    "h3.10",
+                    "h3.9",
+                    "h3.8"
+                  ]
                 }
               ]
             }
@@ -133,8 +173,12 @@
                   "status": "Planned",
                   "story_points": 1,
                   "dependencies": [],
-                  "prd_selectors": ["h2.15", "h2.16", "h3.4"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 2b and GAP 8a. session_history.tmux:55 currently sets: 'tmux set-option -g \\'@session-history-dwell-ms\\' 10000'. PRD §15 specifies the default as 30000. PRD §16 says: 'The entry script also defaults @session-history-dwell-ms to 30000 if unset.'\n2. INPUT: session_history.tmux with dwell default set to 10000 at ~line 55.\n3. LOGIC: Change '10000' to '30000' in the set-option line. This must agree with the engine's dwell_ms() fallback (P1.M1.T3.S1) and the README Options table (P1.M3.T2.S1).\n4. OUTPUT: session_history.tmux defaults @session-history-dwell-ms to 30000, matching PRD §15/§16.\n5. DOCS: none — this is a code/config default change; the README update is handled separately in P1.M3."
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 2b and GAP 8a. session_history.tmux:55 currently sets: 'tmux set-option -g \\'@session-history-dwell-ms\\' 10000'. PRD §15 specifies the default as 30000. PRD §16 says: 'The entry script also defaults @session-history-dwell-ms to 30000 if unset.'\n2. INPUT: session_history.tmux with dwell default set to 10000 at ~line 55.\n3. LOGIC: Change '10000' to '30000' in the set-option line. This must agree with the engine's dwell_ms() fallback (P1.M1.T3.S1) and the README Options table (P1.M3.T2.S1).\n4. OUTPUT: session_history.tmux defaults @session-history-dwell-ms to 30000, matching PRD §15/§16.\n5. DOCS: none — this is a code/config default change; the README update is handled separately in P1.M3.",
+                  "prd_selectors": [
+                    "h2.15",
+                    "h2.16",
+                    "h3.4"
+                  ]
                 },
                 {
                   "type": "Subtask",
@@ -142,9 +186,16 @@
                   "title": "Remove focused-activity comment block and rewrite bootstrap comment",
                   "status": "Planned",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T1.S1"],
-                  "prd_selectors": ["h2.12", "h2.9", "h2.16", "h2.17"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 8b and GAP 8c. session_history.tmux has: (a) a '# --- focused-activity detection (only with toggle bound) ---' comment block (~lines 70-77) describing client_activity, the poller, and alert-activity — DELETE entirely (PRD §12: not wired; PRD §9: no extra hooks with toggle); (b) a bootstrap comment (~lines 79-83) explaining 'do_init reads @session-history-toggle-enabled to decide whether to start the focused-activity poller, so it must run after that flag is set' — REWRITE: the rationale is no longer the poller; init must still run LAST (after hooks/keys/options are in place) because it seeds initial state, but the poller-race wording must go. The entry point itself never directly starts the poller (that was do_init → do_start_poller, now removed in P1.M1.T2).\n2. INPUT: session_history.tmux after the dwell default change (S1). The focused-activity comment block and poller-race bootstrap comment are still present.\n3. LOGIC: (a) Delete the entire '# --- focused-activity detection (only with toggle bound) ---' comment block (~lines 70-77). (b) Rewrite the bootstrap comment (~lines 79-83) to say init runs LAST because it seeds initial state and must see the hooks/keys/options already in place — remove all references to the poller, toggle-enabled-flag-racing, and 'focused-activity'. Keep the 'tmux run-shell \"${SCRIPT} init\"' call itself.\n4. OUTPUT: session_history.tmux has no activity-detection references. The bootstrap comment accurately explains why init runs last (state seeding, not poller starting).\n5. DOCS: This IS the doc update (Mode A — inline comments in the entry-point file). No separate docs subtask."
+                  "dependencies": [
+                    "P1.M1.T1.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/gap_analysis.md GAP 8b and GAP 8c. session_history.tmux has: (a) a '# --- focused-activity detection (only with toggle bound) ---' comment block (~lines 70-77) describing client_activity, the poller, and alert-activity — DELETE entirely (PRD §12: not wired; PRD §9: no extra hooks with toggle); (b) a bootstrap comment (~lines 79-83) explaining 'do_init reads @session-history-toggle-enabled to decide whether to start the focused-activity poller, so it must run after that flag is set' — REWRITE: the rationale is no longer the poller; init must still run LAST (after hooks/keys/options are in place) because it seeds initial state, but the poller-race wording must go. The entry point itself never directly starts the poller (that was do_init → do_start_poller, now removed in P1.M1.T2).\n2. INPUT: session_history.tmux after the dwell default change (S1). The focused-activity comment block and poller-race bootstrap comment are still present.\n3. LOGIC: (a) Delete the entire '# --- focused-activity detection (only with toggle bound) ---' comment block (~lines 70-77). (b) Rewrite the bootstrap comment (~lines 79-83) to say init runs LAST because it seeds initial state and must see the hooks/keys/options already in place — remove all references to the poller, toggle-enabled-flag-racing, and 'focused-activity'. Keep the 'tmux run-shell \"${SCRIPT} init\"' call itself.\n4. OUTPUT: session_history.tmux has no activity-detection references. The bootstrap comment accurately explains why init runs last (state seeding, not poller starting).\n5. DOCS: This IS the doc update (Mode A — inline comments in the entry-point file). No separate docs subtask.",
+                  "prd_selectors": [
+                    "h2.12",
+                    "h2.9",
+                    "h2.16",
+                    "h2.17"
+                  ]
                 }
               ]
             }
@@ -170,9 +221,19 @@
                   "title": "Rewrite promotion model — remove activity bullet, keep selection + dwell",
                   "status": "Planned",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T1.S1", "P1.M1.T3.S1"],
-                  "prd_selectors": ["h2.6", "h2.2", "h2.7", "h3.1", "h3.2", "h3.6"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §1b and §3. The README 'How it works' section (~lines 106-128) currently has a three-bullet promotion list where the FIRST bullet is 'type, switch panes/windows, or run any tmux command in it while viewing it — this is the primary signal' with extensive client_activity explanation. PRD §6 lists exactly TWO causes: (1) direct selection, (2) dwell. The 'But the instant you produce output in a walked-to session, activity promotes it immediately' paragraph (~lines 126-127) is false in the target state.\n2. INPUT: README.md in its current state. The engine has already been refactored (P1.M1 done) so the code reflects selection+dwell-only.\n3. LOGIC: Rewrite the 'A session becomes relevant' bullet list to exactly two bullets matching PRD §6: (1) 'select it directly' — via toggle, pick, tmux-sessionx, or a manual switch-client; (2) 'dwell on it' — reach it by walking (back/forward) and stay longer than @session-history-dwell-ms (default 30 s). Delete the entire 'type, switch panes/windows...' bullet, the client_activity explanation, the monitor-activity parenthetical, and the 'produce output... activity promotes immediately' paragraph. Rewrite the 'Walking through a session does not make it relevant' paragraph to explain that if you walk from A to B and toggle, you flip back to A (not the adjacent session), and if you stay on B long enough, dwell promotes it.\n4. OUTPUT: README 'How it works' promotion model describes exactly two causes (selection + dwell) matching PRD §6, with no activity/typing/output references.\n5. DOCS: This IS the doc update (Mode A — README section directly touched by the relevance-model change)."
+                  "dependencies": [
+                    "P1.M1.T1.S1",
+                    "P1.M1.T3.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §1b and §3. The README 'How it works' section (~lines 106-128) currently has a three-bullet promotion list where the FIRST bullet is 'type, switch panes/windows, or run any tmux command in it while viewing it — this is the primary signal' with extensive client_activity explanation. PRD §6 lists exactly TWO causes: (1) direct selection, (2) dwell. The 'But the instant you produce output in a walked-to session, activity promotes it immediately' paragraph (~lines 126-127) is false in the target state.\n2. INPUT: README.md in its current state. The engine has already been refactored (P1.M1 done) so the code reflects selection+dwell-only.\n3. LOGIC: Rewrite the 'A session becomes relevant' bullet list to exactly two bullets matching PRD §6: (1) 'select it directly' — via toggle, pick, tmux-sessionx, or a manual switch-client; (2) 'dwell on it' — reach it by walking (back/forward) and stay longer than @session-history-dwell-ms (default 30 s). Delete the entire 'type, switch panes/windows...' bullet, the client_activity explanation, the monitor-activity parenthetical, and the 'produce output... activity promotes immediately' paragraph. Rewrite the 'Walking through a session does not make it relevant' paragraph to explain that if you walk from A to B and toggle, you flip back to A (not the adjacent session), and if you stay on B long enough, dwell promotes it.\n4. OUTPUT: README 'How it works' promotion model describes exactly two causes (selection + dwell) matching PRD §6, with no activity/typing/output references.\n5. DOCS: This IS the doc update (Mode A — README section directly touched by the relevance-model change).",
+                  "prd_selectors": [
+                    "h2.6",
+                    "h2.2",
+                    "h2.7",
+                    "h3.1",
+                    "h3.2",
+                    "h3.6"
+                  ]
                 },
                 {
                   "type": "Subtask",
@@ -180,9 +241,18 @@
                   "title": "Remove 'How activity detection works' subsection and rewrite async-paths paragraph",
                   "status": "Planned",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T1.S1"],
-                  "prd_selectors": ["h2.12", "h2.8", "h2.13", "h3.8", "h3.9", "h3.10"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §1c, §1d, §5, and §6. The README has a bolded '**How activity detection works.**' subsection (~lines 130-140) that describes the client_activity timestamp, the background poller (~0.5-1 s), and 'no per-pane pipes / one resident process'. PRD §12 explicitly says there is no output-activity signal. The async-paths paragraph (~lines 142-148) says 'The dwell timer is one asynchronous path; focused-activity detection is the other' and 'activity promotes it instead' — both false in the target state. PRD §8 describes dwell as the sole async path touching only the relevance list.\n2. INPUT: README.md after S1 has rewritten the promotion model. The 'How activity detection works' subsection and the two-async-paths paragraph are still present.\n3. LOGIC: (a) DELETE the entire '**How activity detection works.**' subsection (~lines 130-140). (b) Rewrite the async-paths paragraph (~lines 142-148) to state: 'The dwell timer is the only asynchronous path, and it touches only the relevance list (never the timeline), so a rare lost update only nudges relevance and self-heals on the next switch. When you walk onto a session, a background timer is armed; if you are still on that session when it fires, the session is promoted. The timer self-cancels if you have moved on, so stale timers are harmless.' Optionally add one sentence: 'Relevance intentionally comes from selection and dwell only: there is no robust tmux primitive for focused-session output detection without a resident process per pane.' Remove all 'focused-activity detection is the other', 'activity promotes it instead', 'one resident process' text. Note: with toggle unbound there are zero resident processes; with it bound the only background work is short-lived dwell timers.\n4. OUTPUT: README has no 'How activity detection works' subsection. The async-paths paragraph describes dwell as the sole async path matching PRD §8/§13.\n5. DOCS: This IS the doc update (Mode A — README section directly touched by the activity-removal change)."
+                  "dependencies": [
+                    "P1.M1.T1.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §1c, §1d, §5, and §6. The README has a bolded '**How activity detection works.**' subsection (~lines 130-140) that describes the client_activity timestamp, the background poller (~0.5-1 s), and 'no per-pane pipes / one resident process'. PRD §12 explicitly says there is no output-activity signal. The async-paths paragraph (~lines 142-148) says 'The dwell timer is one asynchronous path; focused-activity detection is the other' and 'activity promotes it instead' — both false in the target state. PRD §8 describes dwell as the sole async path touching only the relevance list.\n2. INPUT: README.md after S1 has rewritten the promotion model. The 'How activity detection works' subsection and the two-async-paths paragraph are still present.\n3. LOGIC: (a) DELETE the entire '**How activity detection works.**' subsection (~lines 130-140). (b) Rewrite the async-paths paragraph (~lines 142-148) to state: 'The dwell timer is the only asynchronous path, and it touches only the relevance list (never the timeline), so a rare lost update only nudges relevance and self-heals on the next switch. When you walk onto a session, a background timer is armed; if you are still on that session when it fires, the session is promoted. The timer self-cancels if you have moved on, so stale timers are harmless.' Optionally add one sentence: 'Relevance intentionally comes from selection and dwell only: there is no robust tmux primitive for focused-session output detection without a resident process per pane.' Remove all 'focused-activity detection is the other', 'activity promotes it instead', 'one resident process' text. Note: with toggle unbound there are zero resident processes; with it bound the only background work is short-lived dwell timers.\n4. OUTPUT: README has no 'How activity detection works' subsection. The async-paths paragraph describes dwell as the sole async path matching PRD §8/§13.\n5. DOCS: This IS the doc update (Mode A — README section directly touched by the activity-removal change).",
+                  "prd_selectors": [
+                    "h2.12",
+                    "h2.8",
+                    "h2.13",
+                    "h3.8",
+                    "h3.9",
+                    "h3.10"
+                  ]
                 }
               ]
             },
@@ -199,9 +269,17 @@
                   "title": "Update dwell-ms row in Options table",
                   "status": "Planned",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T3.S1", "P1.M2.T1.S1"],
-                  "prd_selectors": ["h2.15", "h2.8", "h3.4", "h3.8"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §1a and §4. README.md:86 (Options table) currently shows: '| @session-history-dwell-ms | 10000 | Fallback for silent presence: how long you must stay on a session you walked to (back/forward) without typing/interacting before it counts as relevant. Working there (typing, switching panes, any tmux command) promotes it immediately regardless. 0 disables dwell (relevance then comes only from selecting a session or interacting with it). |'. This presupposes the activity poller. PRD §15 default is 30000.\n2. INPUT: README.md after the engine and entry-point dwell defaults have been changed to 30000 (P1.M1.T3.S1, P1.M2.T1.S1).\n3. LOGIC: Change the default cell from '10000' to '30000'. Rewrite the description to: 'How long you must stay on a session you walked to (back/forward) before it counts as relevant. This is the only way a walked-to session becomes a toggle target besides re-selecting it. 0 disables dwell — relevance then comes only from selecting a session (toggle, pick, tmux-sessionx, or a manual switch).' Drop all 'fallback', 'typing/interacting', 'Working there promotes it immediately', and 'interacting with it' text.\n4. OUTPUT: README Options table shows 30000 default with a description matching the selection+dwell-only model.\n5. DOCS: This IS the doc update (Mode A — README Options table directly touched by the dwell-default/description change)."
+                  "dependencies": [
+                    "P1.M1.T3.S1",
+                    "P1.M2.T1.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §1a and §4. README.md:86 (Options table) currently shows: '| @session-history-dwell-ms | 10000 | Fallback for silent presence: how long you must stay on a session you walked to (back/forward) without typing/interacting before it counts as relevant. Working there (typing, switching panes, any tmux command) promotes it immediately regardless. 0 disables dwell (relevance then comes only from selecting a session or interacting with it). |'. This presupposes the activity poller. PRD §15 default is 30000.\n2. INPUT: README.md after the engine and entry-point dwell defaults have been changed to 30000 (P1.M1.T3.S1, P1.M2.T1.S1).\n3. LOGIC: Change the default cell from '10000' to '30000'. Rewrite the description to: 'How long you must stay on a session you walked to (back/forward) before it counts as relevant. This is the only way a walked-to session becomes a toggle target besides re-selecting it. 0 disables dwell — relevance then comes only from selecting a session (toggle, pick, tmux-sessionx, or a manual switch).' Drop all 'fallback', 'typing/interacting', 'Working there promotes it immediately', and 'interacting with it' text.\n4. OUTPUT: README Options table shows 30000 default with a description matching the selection+dwell-only model.\n5. DOCS: This IS the doc update (Mode A — README Options table directly touched by the dwell-default/description change).",
+                  "prd_selectors": [
+                    "h2.15",
+                    "h2.8",
+                    "h3.4",
+                    "h3.8"
+                  ]
                 },
                 {
                   "type": "Subtask",
@@ -209,9 +287,16 @@
                   "title": "Update Troubleshooting section to remove activity references",
                   "status": "Planned",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T1.S1"],
-                  "prd_selectors": ["h2.6", "h2.7", "h2.14", "h2.15"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §1e and §7. README.md:185-189 (Troubleshooting) currently says: 'a session enters the relevance list when you select it, produce output in it while viewing it, or dwell on it' and 'Walked-past sessions are intentionally skipped (unless you then produce output in them).' Both reference the removed output-activity signal. The status/reset debug helpers (~lines 173-183) have NO activity references and need no change.\n2. INPUT: README.md after the How-it-works rewrite (P1.M3.T1).\n3. LOGIC: Rewrite lines 185-189 to: 'If toggle seems to target the \"wrong\" session, remember it tracks relevance, not recency: a session enters the relevance list only when you select it or dwell on it long enough. Walked-past sessions are intentionally skipped — if you want a silent walk to \"stick\" sooner, lower @session-history-dwell-ms (or set it to 0 and only direct selections will ever count).' Remove 'produce output in it while viewing it' and 'unless you then produce output in them'.\n4. OUTPUT: README Troubleshooting describes selection + dwell only, with no activity/output references.\n5. DOCS: This IS the doc update (Mode A — README section directly touched by the relevance-model change)."
+                  "dependencies": [
+                    "P1.M1.T1.S1"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §1e and §7. README.md:185-189 (Troubleshooting) currently says: 'a session enters the relevance list when you select it, produce output in it while viewing it, or dwell on it' and 'Walked-past sessions are intentionally skipped (unless you then produce output in them).' Both reference the removed output-activity signal. The status/reset debug helpers (~lines 173-183) have NO activity references and need no change.\n2. INPUT: README.md after the How-it-works rewrite (P1.M3.T1).\n3. LOGIC: Rewrite lines 185-189 to: 'If toggle seems to target the \"wrong\" session, remember it tracks relevance, not recency: a session enters the relevance list only when you select it or dwell on it long enough. Walked-past sessions are intentionally skipped — if you want a silent walk to \"stick\" sooner, lower @session-history-dwell-ms (or set it to 0 and only direct selections will ever count).' Remove 'produce output in it while viewing it' and 'unless you then produce output in them'.\n4. OUTPUT: README Troubleshooting describes selection + dwell only, with no activity/output references.\n5. DOCS: This IS the doc update (Mode A — README section directly touched by the relevance-model change).",
+                  "prd_selectors": [
+                    "h2.6",
+                    "h2.7",
+                    "h2.14",
+                    "h2.15"
+                  ]
                 }
               ]
             },
@@ -228,9 +313,30 @@
                   "title": "Verify cross-file documentation consistency (README ↔ code ↔ PRD)",
                   "status": "Planned",
                   "story_points": 1,
-                  "dependencies": ["P1.M1.T1.S1", "P1.M1.T1.S2", "P1.M1.T2.S1", "P1.M1.T3.S1", "P1.M1.T4.S1", "P1.M1.T4.S2", "P1.M2.T1.S1", "P1.M2.T1.S2", "P1.M3.T1.S1", "P1.M3.T1.S2", "P1.M3.T2.S1", "P1.M3.T2.S2"],
-                  "prd_selectors": ["h2.0", "h2.15", "h2.17", "h2.20", "h2.6", "h2.12", "h2.19"],
-                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §9 (cross-document consistency checks) and plan/001_ca41c05f3ead/architecture/system_context.md (residual risks). The key risks are: (a) README ↔ code dwell-default drift (must be 30000 in README Options table, session_history.tmux:55, and dwell_ms() in session_history.sh:154); (b) any stray 'activity', 'poller', 'client_activity', 'typing', 'produce output', 'focused activity', 'pipe-pane', or '10000' references surviving anywhere in the three files; (c) README 'Limitations' section could optionally add PRD §19's 'No output-activity signal by design; relevance is selection + dwell' and 'Dwell granularity is whole seconds'.\n2. INPUT: All three files (scripts/session_history.sh, session_history.tmux, README.md) in their final post-refactor state, after all implementing subtasks (P1.M1, P1.M2, P1.M3.T1, P1.M3.T2) are complete.\n3. LOGIC: Run these verification checks: (a) 'grep -rn \"10000\" scripts/ session_history.tmux README.md' — must return ZERO hits (the only valid dwell default is 30000); (b) 'grep -rni \"activity\\|poller\\|client_activity\\|focused.activity\\|pipe-pane\\|produce output\\|typing.*promot\" scripts/ session_history.tmux README.md' — must return ZERO hits (all activity-detection references removed); (c) verify the README Options table, engine dwell_ms(), and entry-point default all show 30000; (d) verify the subcommand list in the engine Usage string matches PRD §17's 11 commands; (e) optionally add to README 'Limitations' a one-liner: 'Relevance comes from selection and dwell only — there is no output-activity signal by design (see SPEC.md §12). Dwell granularity is whole seconds.'; (f) verify the README 'How it works' section has exactly two promotion causes (selection + dwell) and no 'How activity detection works' subsection. Fix any inconsistencies found.\n4. OUTPUT: All three files are internally consistent with each other and with the PRD. No stale references to the removed activity-detection subsystem remain anywhere.\n5. DOCS: This IS the changeset-level documentation sweep (Mode B per SOW §5). It depends on every implementing subtask and runs last."
+                  "dependencies": [
+                    "P1.M1.T1.S1",
+                    "P1.M1.T1.S2",
+                    "P1.M1.T2.S1",
+                    "P1.M1.T3.S1",
+                    "P1.M1.T4.S1",
+                    "P1.M1.T4.S2",
+                    "P1.M2.T1.S1",
+                    "P1.M2.T1.S2",
+                    "P1.M3.T1.S1",
+                    "P1.M3.T1.S2",
+                    "P1.M3.T2.S1",
+                    "P1.M3.T2.S2"
+                  ],
+                  "context_scope": "CONTRACT DEFINITION:\n1. RESEARCH NOTE: See plan/001_ca41c05f3ead/architecture/doc_impact.md §9 (cross-document consistency checks) and plan/001_ca41c05f3ead/architecture/system_context.md (residual risks). The key risks are: (a) README ↔ code dwell-default drift (must be 30000 in README Options table, session_history.tmux:55, and dwell_ms() in session_history.sh:154); (b) any stray 'activity', 'poller', 'client_activity', 'typing', 'produce output', 'focused activity', 'pipe-pane', or '10000' references surviving anywhere in the three files; (c) README 'Limitations' section could optionally add PRD §19's 'No output-activity signal by design; relevance is selection + dwell' and 'Dwell granularity is whole seconds'.\n2. INPUT: All three files (scripts/session_history.sh, session_history.tmux, README.md) in their final post-refactor state, after all implementing subtasks (P1.M1, P1.M2, P1.M3.T1, P1.M3.T2) are complete.\n3. LOGIC: Run these verification checks: (a) 'grep -rn \"10000\" scripts/ session_history.tmux README.md' — must return ZERO hits (the only valid dwell default is 30000); (b) 'grep -rni \"activity\\|poller\\|client_activity\\|focused.activity\\|pipe-pane\\|produce output\\|typing.*promot\" scripts/ session_history.tmux README.md' — must return ZERO hits (all activity-detection references removed); (c) verify the README Options table, engine dwell_ms(), and entry-point default all show 30000; (d) verify the subcommand list in the engine Usage string matches PRD §17's 11 commands; (e) optionally add to README 'Limitations' a one-liner: 'Relevance comes from selection and dwell only — there is no output-activity signal by design (see SPEC.md §12). Dwell granularity is whole seconds.'; (f) verify the README 'How it works' section has exactly two promotion causes (selection + dwell) and no 'How activity detection works' subsection. Fix any inconsistencies found.\n4. OUTPUT: All three files are internally consistent with each other and with the PRD. No stale references to the removed activity-detection subsystem remain anywhere.\n5. DOCS: This IS the changeset-level documentation sweep (Mode B per SOW §5). It depends on every implementing subtask and runs last.",
+                  "prd_selectors": [
+                    "h2.0",
+                    "h2.15",
+                    "h2.17",
+                    "h2.20",
+                    "h2.6",
+                    "h2.12",
+                    "h2.19"
+                  ]
                 }
               ]
             }
