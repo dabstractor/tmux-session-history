@@ -37,31 +37,22 @@
 #                             list that isn't the current session.
 #
 # WHAT MAKES A SESSION "RELEVANT" (promoted to #1 of the relevance list)?
-#   • direct navigation — pick / sessionx / manual switch / toggle: the session
-#     you select becomes #1 immediately.
-#   • focused activity (the PRIMARY signal) — typing, switching panes/windows,
-#     or doing ANY tmux action in the session you are CURRENTLY VIEWING promotes
-#     it to #1 within ~0.5–1.5 s. tmux's alert-activity can't see the focused
-#     window (it fires only for background windows), so this is detected instead
-#     via the attached client's `#{client_activity}` timestamp: tmux advances it
-#     on every keystroke the client sends (a character passed through to the
-#     shell, a pane/window switch, or any tmux command). A single background
-#     poller promotes the current session whenever that timestamp advances while
-#     the session STAYS the same — which is exactly "the user is working in the
-#     session they're viewing". A session-switch keystroke (back/forward/toggle/
-#     sessionx) also advances client_activity, but it CHANGES the session in the
-#     same key event, so the poller sees "session changed" and skips it (walks/
-#     nav/toggle keep their own promotion logic). No per-pane pipes, no reader
-#     processes, no focus-following — and it captures typing AND pane/window
-#     switches AND any tmux action alike.
-#   • dwell (the SILENT-PRESENCE fallback) — if you reach a session by a WALK
-#     and stay on it longer than @session-history-dwell-ms (default 10000 ms)
-#     WITHOUT producing output, it becomes #1. Covers reading/thinking; it is
-#     superseded the instant you produce output.
+#   A session is promoted to the FRONT of the relevance list by exactly TWO
+#   causes:
+#   • direct selection — any NAVIGATION (pick / sessionx / manual switch-client)
+#     or TOGGLE promotes the session you land on (`to`) to #1 immediately.
+#   • dwell — if you reach a session by a WALK (back/forward) and stay on it
+#     longer than @session-history-dwell-ms (default 30000 ms), it becomes #1.
+#
 #   Walking (back/forward) through a session does NOT promote it by itself —
-#   merely browsing past a session never makes it relevant. But the moment you
-#   produce output in a walked-to session, activity promotes it immediately,
-#   which is exactly the user's intent ("I'm working here, that's my toggle").
+#   merely browsing past a session never makes it relevant. This is the rule
+#   that makes toggle track USAGE rather than browsing: if you are working in A,
+#   walk the timeline back through several sessions to B, and toggle, you flip
+#   to A (the thing you were using) — not to the session adjacent to B — because
+#   the walk never promoted the in-between sessions.
+#
+#   promote_tlist is idempotent and dedups, so promoting a session already at
+#   #1 is a no-op, and promoting one lower down moves it to #1.
 #
 # When a session closes it is removed from BOTH lists (everything above shifts
 # down). We NEVER auto-add a replacement, so closing the *current* session does

@@ -11,7 +11,7 @@
           "type": "Milestone",
           "id": "P1.M1",
           "title": "Engine Code Refactor (scripts/session_history.sh)",
-          "status": "Planned",
+          "status": "Researching",
           "description": "Remove the activity-detection subsystem from the engine script, clean do_init of poller/pipe-pane legacy code, update the dwell default to 30000 ms, and rewrite the header comments to reflect the PRD §6 selection+dwell-only relevance model and the PRD §13 concurrency model (dwell is now the only async path).",
           "tasks": [
             {
@@ -108,14 +108,14 @@
               "type": "Task",
               "id": "P1.M1.T4",
               "title": "Rewrite Engine Header Comments to Match PRD",
-              "status": "Planned",
+              "status": "Researching",
               "description": "Rewrite the header comment block (lines 1-108) of scripts/session_history.sh to remove all references to focused-activity / client_activity polling and reflect the PRD §6 selection+dwell-only relevance model and the PRD §13 concurrency model where dwell is the only async path.",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M1.T4.S1",
                   "title": "Rewrite 'WHAT MAKES A SESSION RELEVANT' comment section",
-                  "status": "Researching",
+                  "status": "Complete",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1",
@@ -134,7 +134,7 @@
                   "type": "Subtask",
                   "id": "P1.M1.T4.S2",
                   "title": "Rewrite CONCURRENCY comment section to remove activity/poller references",
-                  "status": "Planned",
+                  "status": "Researching",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1"
