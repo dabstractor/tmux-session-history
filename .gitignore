@@ -9,3 +9,6 @@
 # Local test / scratch
 *.log
 tmp/
+
+# Agent harness artifacts
+.pi-subagents/
