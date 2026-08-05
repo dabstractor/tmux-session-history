@@ -14,7 +14,7 @@ description: "Surgical bash edit to `do_init()` in `scripts/session_history.sh`.
 2. `shellcheck scripts/session_history.sh` reports **no new diagnostics** vs. a pre-edit baseline.
 3. `grep -n 'do_start_poller' scripts/session_history.sh` → **zero matches** (the call site is gone).
 4. `grep -n 'piped-pane\|pipe-pane' scripts/session_history.sh` → **zero matches** anywhere (the legacy block is fully removed; no other code references it).
-5. `grep -n 'poller-pid' scripts/session_history.sh` → matches ONLY inside the new migration guard (3 lines: the read, the kill-guarded reference, the clear). This is expected and correct — it is the self-cleaning guard.
+5. `grep -n 'poller-pid' scripts/session_history.sh` → matches ONLY inside the new migration guard (**3 lines**: the comment that names the option, the `G` read, the `S` clear). The kill line contains `old_pid`, not `poller-pid`, so it is NOT counted. This is expected and correct — it is the self-cleaning guard.
 6. `do_init()` starts NO process: `sed -n '/^do_init()/,/^}/p' scripts/session_history.sh | grep -nE 'run-shell|setsid|nohup|disown|\s&\s*$'` → **zero matches**.
 7. `wc -l scripts/session_history.sh` == **BASELINE − 5** (see Baseline Note: **559** if only S1 has landed / **557** if S2 has also landed; the edit itself is always −5 lines).
 8. Under a throwaway tmux server, `session_history.sh init` runs **without** a `do_start_poller: command not found` error (it currently fails this — S2 leaves `init` broken; THIS task fixes it).
@@ -223,6 +223,23 @@ boundaries. An implementer with zero prior knowledge of this codebase can do it 
 
 ## Implementation Blueprint
 
+### ⚠️ Pre-flight state check (run FIRST)
+
+**This PRP's edit was already applied during the research session** (commit `85779f4`
+*"Remove dead poller bootstrap and pipe-pane cleanup from init"*, driven by this PRP). The live
+`do_init()` already matches the target below. Before attempting the Task 2 edit, run:
+
+```bash
+sed -n '/# Legacy cleanup: older versions/,/do_start_poller/p' scripts/session_history.sh
+# Prints the pipe-pane + poller-start block → edit NOT yet applied → do Task 2.
+# Prints NOTHING (empty)              → edit ALREADY applied     → SKIP Task 2, run Tasks 3–6.
+{ sed -n '/^do_init()/,/^}/p' scripts/session_history.sh | grep -c 'migration guard'; } \
+  && echo "(guard present = 1 ⇒ already applied)"
+```
+
+The edit mechanics in Task 2 are correct either way; this check makes the PRP **idempotent** — a
+re-run against an already-fixed file validates instead of failing to find the `oldText`.
+
 ### The exact target `do_init()` (post-T2.S1) — full function, verbatim
 
 ```bash
@@ -297,11 +314,12 @@ Task 5: VERIFY removal + structural invariants with grep (no edits)
   - RUN: grep -n 'poller-pid' scripts/session_history.sh
     EXPECTED: exactly 3 lines, all inside the new migration guard:
         (the `G "$(H poller-pid)"` read)
-        (the `[ -n "$old_pid" ] && kill "$old_pid"` line — note: this line does NOT contain
-         the literal 'poller-pid'; only the read and the clear do)
-      => actually 2 literal 'poller-pid' matches: the `local old_pid; old_pid="$(G "$(H poller-pid)" ...`
-         line and the `S "$(H poller-pid)" ""` line. The kill line contains old_pid, not poller-pid.
-      => So EXPECTED: exactly 2 lines containing the literal 'poller-pid', both in the guard.
+        => 3 literal 'poller-pid' matches, ALL inside the guard:
+         (1) the comment line that names '@session-history-poller-pid',
+         (2) the `local old_pid; old_pid="$(G "$(H poller-pid)" ...)" read,
+         (3) the `S "$(H poller-pid)" ""` clear.
+         The kill line (`[ -n "$old_pid" ] && kill "$old_pid"`) contains `old_pid`, NOT 'poller-pid',
+         so it is NOT matched. EXPECTED: exactly 3 lines, all in the guard.
   - RUN: sed -n '/^do_init()/,/^}/p' scripts/session_history.sh | grep -nE 'run-shell|setsid|nohup|disown|[[:space:]]&[[:space:]]*$'
     EXPECTED: ZERO output (do_init starts nothing).
   - RUN: sed -n '/^do_init()/,/^}/p' scripts/session_history.sh | grep -c 'CURRENT="\$s"; save'
@@ -442,11 +460,13 @@ grep -n 'do_start_poller' scripts/session_history.sh
 grep -nE 'piped-pane|pipe-pane' scripts/session_history.sh
 # Expected: NO output (zero matches anywhere — no other code references it).
 
-# C. poller-pid survives ONLY inside the guard (self-cleaning drain). Exactly 2 literal matches:
+# C. poller-pid survives ONLY inside the guard (self-cleaning drain). Exactly 3 literal matches:
 grep -n 'poller-pid' scripts/session_history.sh
-# Expected: exactly 2 lines, both inside do_init's migration guard:
-#   ...local old_pid; old_pid="$(G "$(H poller-pid)" 2>/dev/null)"
-#   ...S "$(H poller-pid)" "" 2>/dev/null
+# Expected: exactly 3 lines, all inside do_init's migration guard:
+#   ...# running, tracked in @session-history-poller-pid. That machinery is gone   (comment)
+#   ...local old_pid; old_pid="$(G "$(H poller-pid)" 2>/dev/null)"                 (read)
+#   ...S "$(H poller-pid)" "" 2>/dev/null                                          (clear)
+# (The kill line uses old_pid, not poller-pid, so it is not counted.)
 
 # D. do_init starts NO process:
 sed -n '/^do_init()/,/^}/p' scripts/session_history.sh \
@@ -549,7 +569,7 @@ sed -n '/^do_init()/,/^}/p' scripts/session_history.sh | grep -ciE 'tmux run-she
 - [ ] `wc -l scripts/session_history.sh` == **BASELINE − 5** (559 post-S1-only / 557 post-S2).
 - [ ] `grep -n 'do_start_poller' scripts/session_history.sh` → zero matches.
 - [ ] `grep -nE 'piped-pane|pipe-pane' scripts/session_history.sh` → zero matches.
-- [ ] `grep -n 'poller-pid' scripts/session_history.sh` → exactly 2 lines, both in the guard.
+- [ ] `grep -n 'poller-pid' scripts/session_history.sh` → exactly 3 lines, all in the guard (comment mention + `G` read + `S` clear).
 - [ ] `sed -n '/^do_init()/,/^}/p' … | grep -nE 'run-shell|setsid|nohup|disown|[[:space:]]&[[:space:]]*$'`
       → zero matches (do_init starts nothing).
 

@@ -58,14 +58,14 @@
               "type": "Task",
               "id": "P1.M1.T2",
               "title": "Clean do_init() — Remove Poller Bootstrap & Pipe-Pane Legacy",
-              "status": "Complete",
+              "status": "Ready",
               "description": "Strip do_init of the pipe-pane legacy cleanup block and the do_start_poller() call so it matches PRD §17 ('Seed initial state if empty'). Add a one-shot stale-poller migration guard so upgrading users don't get orphaned poller processes.",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M1.T2.S1",
                   "title": "Remove pipe-pane legacy cleanup and poller start; add stale-poller migration guard",
-                  "status": "Complete",
+                  "status": "Ready",
                   "story_points": 2,
                   "dependencies": [
                     "P1.M1.T1.S1"
