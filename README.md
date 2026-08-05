@@ -120,25 +120,17 @@ because A is what you were using and the walk never promoted the ones in
 between. If you instead stay on that walked-to session B long enough, dwell
 promotes it; press toggle and you're now oscillating between A and B.
 
-**How activity detection works.** When toggle is bound the plugin watches the
-attached client's `client_activity` timestamp. tmux advances it on every
-keystroke you send — a character passed through to the shell, a pane/window
-switch, or any tmux command — so it is a direct signal for "the user is working
-in the session they're viewing". A small background poller promotes the current
-session whenever that timestamp advances while the session stays the same
-(~0.5–1 s). A session-switch key (back/forward/toggle/sessionx) also advances
-the timestamp, but it changes the session at the same time, so it is not
-mistaken for work — walking past a session never promotes it. There are no
-per-pane pipes and only one resident process; with toggle unbound there are no
-resident processes at all.
+The dwell timer is the only asynchronous path, and it touches only the
+relevance list (never the timeline), so a rare lost update only nudges
+relevance and self-heals on the next switch. When you walk onto a session, a
+background timer is armed; if you're still on that session when it fires, the
+session is promoted. The timer self-cancels if you've moved on, so stale
+timers are harmless.
 
-The dwell timer is one asynchronous path; focused-activity detection is the
-other. Both touch only the relevance list (never the timeline), so a rare lost
-update only nudges relevance and self-heals on the next switch. When you walk
-onto a session, a background timer is armed; if you're still on that session
-when it fires, the session is promoted. The moment you produce output there,
-activity promotes it instead, so dwell only matters for silent presence. The
-timer self-cancels if you've moved on, so stale timers are harmless.
+Relevance intentionally comes from selection and dwell only: there is no
+robust tmux primitive for "the focused session produced output" without a
+resident process per pane, and tmux's `monitor-activity` only sees
+*background* windows — the opposite of what toggle needs.
 
 When a session closes it is pruned from both lists and everything shifts down.
 Nothing is ever auto-added in its place, so closing the session you're currently

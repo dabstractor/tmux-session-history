@@ -212,7 +212,7 @@
               "type": "Task",
               "id": "P1.M3.T1",
               "title": "Rewrite README 'How it works' Section",
-              "status": "Researching",
+              "status": "Complete",
               "description": "Rewrite the promotion model to selection + dwell only, delete the 'How activity detection works' subsection, and rewrite the async-paths paragraph to describe dwell as the sole async path.",
               "subtasks": [
                 {
@@ -239,7 +239,7 @@
                   "type": "Subtask",
                   "id": "P1.M3.T1.S2",
                   "title": "Remove 'How activity detection works' subsection and rewrite async-paths paragraph",
-                  "status": "Researching",
+                  "status": "Complete",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1"
