@@ -212,7 +212,7 @@
               "type": "Task",
               "id": "P1.M3.T1",
               "title": "Rewrite README 'How it works' Section",
-              "status": "Complete",
+              "status": "Ready",
               "description": "Rewrite the promotion model to selection + dwell only, delete the 'How activity detection works' subsection, and rewrite the async-paths paragraph to describe dwell as the sole async path.",
               "subtasks": [
                 {
@@ -239,7 +239,7 @@
                   "type": "Subtask",
                   "id": "P1.M3.T1.S2",
                   "title": "Remove 'How activity detection works' subsection and rewrite async-paths paragraph",
-                  "status": "Complete",
+                  "status": "Ready",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1"
@@ -260,14 +260,14 @@
               "type": "Task",
               "id": "P1.M3.T2",
               "title": "Update README Options Table & Troubleshooting",
-              "status": "Planned",
+              "status": "Researching",
               "description": "Update the Options table dwell-ms row (default 30000, new description without activity references) and the Troubleshooting section (remove 'produce output' references).",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M3.T2.S1",
                   "title": "Update dwell-ms row in Options table",
-                  "status": "Planned",
+                  "status": "Complete",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T3.S1",
@@ -285,7 +285,7 @@
                   "type": "Subtask",
                   "id": "P1.M3.T2.S2",
                   "title": "Update Troubleshooting section to remove activity references",
-                  "status": "Planned",
+                  "status": "Researching",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1"

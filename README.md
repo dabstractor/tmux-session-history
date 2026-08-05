@@ -83,7 +83,7 @@ Set any key to an empty string (or leave it unset) to leave it unbound.
 | `@session-history-back-key` | (empty) | Key bound to back. Empty leaves it unbound. |
 | `@session-history-forward-key` | (empty) | Key bound to forward. Empty leaves it unbound. |
 | `@session-history-pick-key` | (empty) | Key bound to pick. Empty leaves it unbound. |
-| `@session-history-dwell-ms` | `10000` | Fallback for *silent* presence: how long you must stay on a session you *walked* to (back/forward) without typing/interacting before it counts as relevant. Working there (typing, switching panes, any tmux command) promotes it immediately regardless. `0` disables dwell (relevance then comes only from selecting a session or interacting with it). |
+| `@session-history-dwell-ms` | `30000` | How long you must stay on a session you *walked* to (back/forward) before it counts as relevant. This is the only way a walked-to session becomes a toggle target besides re-selecting it. `0` disables dwell — relevance then comes only from selecting a session (toggle, pick, tmux-sessionx, or a manual switch). |
 | `@session-history-popup` | `on` | Use an fzf-tmux popup for pick. Set `off` for inline fzf. |
 
 ## How it works
