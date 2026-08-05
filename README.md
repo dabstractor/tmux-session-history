@@ -168,10 +168,10 @@ Run them through the script under your plugin directory, for example:
 ```
 
 If toggle seems to target the "wrong" session, remember it tracks *relevance*,
-not recency: a session enters the relevance list when you select it, produce
-output in it while viewing it, or dwell on it. Walked-past sessions are
-intentionally skipped (unless you then produce output in them). Lower
-`@session-history-dwell-ms` if you want silent walks to "stick" sooner.
+not recency: a session enters the relevance list only when you select it or
+dwell on it long enough. Walked-past sessions are intentionally skipped — if
+you want a silent walk to "stick" sooner, lower `@session-history-dwell-ms`
+(or set it to `0` and only direct selections will ever count).
 
 ## Limitations
 

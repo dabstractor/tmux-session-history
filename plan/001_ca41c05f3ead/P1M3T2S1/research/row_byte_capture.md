@@ -5,21 +5,31 @@ and the scope boundary that keeps it disjoint from siblings T1.S1, T1.S2, T2.S2.
 
 ## Input state (on-disk, the ground truth for THIS task)
 
-- `wc -l README.md` → **184** lines. (S1 + S2 have already landed: the "How it
-  works" section already reads dwell-only with the §12 sentence; no
-  `**How activity detection works.**` heading remains.)
-- The Options table dwell-ms row is at **line 86** and is the ONLY `10000` in
-  the file (`grep -c '10000' README.md` → 1; `grep -c '`10000`' README.md` → 1).
-- The row's opening anchor `Fallback for *silent* presence` is globally unique
-  (`grep -c` → 1) — safe to key an exact-text replacement on.
+> ⚠️ **STATE SHIFTED MID-RESEARCH.** At first read the row showed `10000` +
+> "Fallback for *silent* presence". By the time the PRP was finalized, a parallel
+> agent had committed the exact target change (`git log` shows commit
+> `9d01bb9 Update README Options table dwell-ms default to 30000`). The PRP is
+> therefore written **idempotently** — correct whether the file is in the pre-edit
+> (State A) or post-edit (State B) state. The facts below were captured at research
+> time (State A) and are preserved as the canonical oldText/newText reference; the
+> PRP's Task 1 branches on the row's current text.
+
+- `wc -l README.md` → **184** lines in BOTH states (S1 + S2 landed: the "How it
+  works" section reads dwell-only with the §12 sentence; no
+  `**How activity detection works.**` heading).
+- The Options table dwell-ms row was at **line 86** and was the ONLY `10000` in
+  the file at research time (State A). In State B it is `30000`.
+- The row's State-A opening anchor `Fallback for *silent* presence` is globally
+  unique; its State-B opening anchor `the only way a walked-to session becomes a
+  toggle target` is globally unique — either serves as a unique text match.
 - Quote style: **0 curly quotes** anywhere in the file (0 × U+2018/U+2019,
   0 × U+201C/U+201D). Apostrophes are straight (U+0027).
-- Em-dashes: **14 × U+2014** (bytes E2 80 94) in the file. The current dwell-ms
-  row contains NO em-dash; the newText will introduce **one** (`— relevance then
-  comes only`), matching the file's established em-dash style.
+- Em-dashes: **14 × U+2014** (bytes E2 80 94) in the file. The State-A row
+  contains NO em-dash; the newText introduces **one** (`— relevance then comes
+  only`), matching the file's established em-dash style.
 - The row uses the file's existing typography: `*walked*` (asterisk emphasis) and
   `` `0` `` / `` `10000` `` (backticks). Confirmed via
-  `sed -n '86p' | grep -oE '\*walked\*|`0`|`10000`'`.
+  `grep '@session-history-dwell-ms' README.md | head -1 | grep -oE '\*walked\*|`0`|`10000`|`30000`'`.
 
 ## Exact oldText (line 86, byte-for-byte, cat -A verified, no trailing newline issues)
 

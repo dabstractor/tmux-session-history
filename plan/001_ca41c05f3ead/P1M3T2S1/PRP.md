@@ -94,14 +94,30 @@ with the rest of the README and with the engine.
 ## What
 
 A single exact-text replacement of **one** markdown table row in `README.md`.
-The row is currently line 86 of the 184-line file (S1+S2 have landed), but
-**anchor on the row's text, not the line number** — see Gotchas.
+The row is in the Options table (the `## Options` block), and **anchor on the
+row's text, not a line number** — see Gotchas.
 
-> **Input state.** README.md is currently **184** lines (S1 and S2 have already
-> landed: the "How it works" section already reads dwell-only with the §12
-> sentence; there is no `**How activity detection works.**` heading). The
-> Options table dwell-ms row is the **only** `10000` left in the file. Verify
-> with `wc -l README.md` → 184 and `grep -c '10000' README.md` → 1 before editing.
+> ⚠️ **CURRENT-STATE / IDEMPOTENCY NOTE (read first).** This PRP is written to
+> be correct **whether or not the change has already been applied** (parallel
+> agents may have landed it). The on-disk state at PRP-authoring time shifted
+> mid-session: at first read the row showed `10000` + "Fallback for *silent*
+> presence"; by the time the PRP was finalized, a parallel agent had committed
+> the exact target change (`git log` shows commit
+> `9d01bb9 Update README Options table dwell-ms default to 30000`). **Either
+> state is a valid input.** Task 1 below DETECTS which state the file is in:
+>
+> - **State A — NOT yet applied** (the row still has `10000` + "Fallback for
+>   *silent* presence"): perform the Task 2 edit, then run the Task 3-5 proofs.
+> - **State B — ALREADY applied** (the row already has `30000` + "the only way
+>   a walked-to session becomes a toggle target"): the Task 2 edit is a
+>   **no-op** (oldText not present); SKIP the edit and go straight to Task 3-5,
+>   which verify the already-applied row matches this PRP's newText exactly. If
+>   it matches, the work is DONE — report success. Do NOT re-edit.
+>
+> In both states the file is **184** lines (S1+S2 landed: the "How it works"
+> section reads dwell-only with the §12 sentence; no `**How activity detection
+> works.**` heading). Task 1's probes branch on the row text, never on a line
+> number.
 
 ### The row being replaced (oldText — one line)
 
@@ -452,45 +468,55 @@ values in the newText.
 ### Implementation Tasks (ordered by dependencies)
 
 ```yaml
-Task 1: CONFIRM input state (no source edits)
-  - RUN: wc -l README.md                                   # EXPECT 184 (S1+S2 landed)
-  - RUN: grep -c 'How activity detection works' README.md  # EXPECT 0 (S2 landed)
-  - RUN: grep -c '10000' README.md                         # EXPECT 1 (the dwell-ms row)
-  - RUN: grep -c 'Fallback for \*silent\* presence' README.md  # EXPECT 1 (unique anchor)
-  - RUN: sed -n '86p' README.md | cat -A                   # eyeball exact bytes incl. `*walked*`, `0`, `10000`
-  - WHY: confirms S1+S2 landed and the row is the only 10000, with the unique text anchor.
-         If wc -l is NOT 184, the heading is still present, or `10000` count is not 1,
-         STOP — a sibling may not have landed (or the row moved); surface the discrepancy
-         instead of editing.
-  - RUN (snapshot for regression): sed -n '84,88p' README.md > /tmp/region_before_m3t2s1.txt
-         # Captures pick-key row (84), forward-key row, dwell-ms row (86), popup row (87)
-         # + the blank/header context. Regression guard: proves rows 84-85 and 87-88 are
-         # byte-identical pre/post (only line 86 changes).
+Task 1: DETECT input state (no source edits) — IDEMPOTENT, branches A vs B
+  - RUN: wc -l README.md                                   # EXPECT 184 either way (S1+S2 landed)
+  - RUN: grep -c 'How activity detection works' README.md  # EXPECT 0 either way (S2 landed)
+  - RUN: old_present=$(grep -c 'Fallback for \*silent\* presence' README.md)   # 1=State A, 0=State B
+  - RUN: new_present=$(grep -c 'the only way a walked-to session becomes a toggle target besides re-selecting it' README.md)  # 0=State A, 1=State B
+  - RUN: grep -n 'Fallback for \*silent\* presence\|the only way a walked-to session' README.md  # locate the dwell-ms row by TEXT
+  - WHY: branch on the row's TEXT, not a line number. Exactly one of {old_present,
+         new_present} should be 1 (the row is either the pre- or post-edit version).
+         - State A (old_present=1, new_present=0): proceed to Task 2 (the edit).
+         - State B (old_present=0, new_present=1): SKIP Task 2 — change is already applied;
+           go straight to Task 3 (it will verify the applied row == this PRP's newText).
+  - RUN: sed -n '/@session-history-dwell-ms/p' README.md | head -1 | cat -A   # eyeball the actual row bytes
+  - STOP-AND-SURFACE only if: wc -l != 184; the heading is still present (S2 not landed);
+    BOTH old_present and new_present are 0 (the row is in some third/unexpected state);
+    or BOTH are 1 (the row appears twice — a merge accident). Those are real discrepancies.
+    A clean State A or State B is NOT a discrepancy — proceed.
+  - RUN (snapshot for regression, State A only): sed -n '/^\| `@session-history-pick-key`/,/^\| `@session-history-popup`/p' README.md > /tmp/region_before_m3t2s1.txt
+         # Captures the Options-table rows from pick-key through popup, inclusive. Regression
+         # guard: proves the pick-key row above and popup row below are byte-identical pre/post.
+         # (Anchored on row text, not line 84-88, so it survives line shifts.)
 
-Task 2: PERFORM the single exact-text row replacement (the edit)
+Task 2: PERFORM the single exact-text row replacement (the edit) — SKIP if Task 1 found State B
+  - GUARD: if Task 1 reported State B (new_present=1), SKIP this task entirely — the
+    change is already applied. Go to Task 3 to verify it matches this PRP's newText.
+    Do NOT attempt the edit (oldText is absent; the `edit` tool would fail to match).
   - USE the `edit` tool with the oldText/newText in the "What" section above. The
     oldText is the EXACT bytes of the dwell-ms row (one line, from leading `|` to
     trailing ` |`). The newText is the rewritten row (30000 default + selection+dwell
     description). Match the U+2014 em-dash exactly; use STRAIGHT quotes; keep
     `*walked*` emphasis and `0`/`30000` backticks.
   - ANCHOR on the full text (opening anchor 'Fallback for *silent* presence' is
-    globally unique; the whole oldText row is unique); do NOT key on 'line 86'.
+    globally unique; the whole oldText row is unique); do NOT key on a line number.
   - PRESERVE byte-for-byte: the pick-key row above, the popup row below, the table
-    header rows, and everything outside line 86.
+    header rows, and every row outside the dwell-ms row.
   - DO NOT TOUCH: any other Options row, the table header, the "How it works"
     section (S1/S2, done), Troubleshooting (~line 172-176, T2.S2's scope),
     Requirements, Limitations, License.
 
 Task 3: VERIFY default change + line count + table structure (no edits)
-  - RUN: after=$(wc -l < README.md); echo "post-edit lines = $after"
-    EXPECTED: 184 (unchanged; one row in, one row out). Any other count = wrong
-              edit scope (you accidentally added/removed a line) — revert.
+  - RUN: after=$(wc -l < README.md); echo "lines = $after"
+    EXPECTED: 184 in BOTH State A (post-edit) and State B (no edit). Any other count =
+              wrong edit scope (you accidentally added/removed a line) — revert.
   - RUN: grep -c '`10000`' README.md   # EXPECTED: 0  (the only 10000 was this row)
   - RUN: grep -c '`30000`' README.md   # EXPECTED: 1  (the new default cell)
   - RUN: grep -n '`30000`' README.md   # confirm it is on the dwell-ms row, not a stray
-  - RUN: sed -n '86p' README.md | awk -F'|' '{print NF}'
+  - RUN: grep '@session-history-dwell-ms' README.md | head -1 | awk -F'|' '{print NF}'
     EXPECTED: 5 (leading empty + trailing empty + 3 cells = a well-formed 3-column row).
-  - RUN: sed -n '86p' README.md | cat -A   # eyeball: `30000`, `*walked*`, `0`, one em-dash (—)
+    # (Text-anchored: greps the dwell-ms row itself, not 'line 86', so it survives shifts.)
+  - RUN: grep '@session-history-dwell-ms' README.md | head -1 | cat -A   # eyeball: `30000`, `*walked*`, `0`, one em-dash (—)
 
 Task 4: VERIFY phrase removal + required phrases on the row (no edits)
   - RUN: grep -c 'Fallback for \*silent\* presence' README.md                # EXPECTED: 0
@@ -503,15 +529,24 @@ Task 4: VERIFY phrase removal + required phrases on the row (no edits)
   - RUN: grep -c '(toggle, pick, tmux-sessionx, or a manual switch)' README.md  # EXPECTED: 1
 
 Task 5: VERIFY sibling-region preservation + markdown sanity (no edits)
-  - RUN: diff <(sed -n '84,85p' /tmp/region_before_m3t2s1.txt) <(sed -n '84,85p' README.md) && echo "ROWS ABOVE OK"
-    EXPECTED: empty diff + "ROWS ABOVE OK" (pick-key + forward-key rows unchanged).
-  - RUN: diff <(sed -n '87,88p' /tmp/region_before_m3t2s1.txt) <(sed -n '87,88p' README.md) && echo "ROWS BELOW OK"
-    EXPECTED: empty diff + "ROWS BELOW OK" (popup row + following blank unchanged).
-  - RUN: grep -c 'How activity detection works' README.md    # EXPECTED: 0 (S2's region untouched)
-  - RUN: sed -n '106,133p' README.md | grep -c 'select it directly'   # EXPECTED: 1 (S1's region intact)
+  - RUN (State A only — needs the Task-1 snapshot): if [ -f /tmp/region_before_m3t2s1.txt ]; then
+      diff <(grep -A1 '@session-history-pick-key' /tmp/region_before_m3t2s1.txt | head -1) \
+           <(grep '@session-history-pick-key' README.md | head -1) && echo "ROW ABOVE OK"
+      diff <(grep '@session-history-popup' /tmp/region_before_m3t2s1.txt | head -1) \
+           <(grep '@session-history-popup' README.md | head -1) && echo "ROW BELOW OK"
+    else echo "State B (no snapshot taken) — skip boundary diff; verify neighbors directly:";
+      grep -c '@session-history-pick-key' README.md; grep -c '@session-history-popup' README.md;
+    fi
+    EXPECTED (State A): empty diffs + "ROW ABOVE OK" + "ROW BELOW OK" (pick-key row above
+              and popup row below unchanged). EXPECTED (State B): each neighbor grep = 1.
+              (Text-anchored on the neighbor row content, not line 84/87.)
+  - RUN: grep -c 'How activity detection works' README.md    # EXPECTED: 0 (S2's region intact/untouched)
+  - RUN: grep -c 'select it directly' README.md             # EXPECTED: 1 (S1's promotion bullet intact)
   - RUN (bonus, if installed): markdownlint README.md 2>/dev/null || mdl README.md 2>/dev/null || echo "no markdown linter — skip (not a failure)"
   - RUN: git diff --stat README.md
-    EXPECTED: a single file; net change ≈ 0 lines (one modified line, no add/delete).
+    EXPECTED: State A — a single file, net ≈0 lines (one modified line, no add/delete).
+              State B — either no diff (already committed) or a single one-line hunk if the
+              prior commit is your working-tree baseline; either is fine.
 ```
 
 ### Implementation Patterns & Key Details
@@ -609,28 +644,33 @@ DOCUMENTATION:
 ### Level 1: Syntax & Style (Immediate Feedback)
 
 ```bash
-# 0. Confirm input state (run BEFORE editing):
-wc -l README.md                                    # expect 184 (S1+S2 landed)
-grep -c 'How activity detection works' README.md   # expect 0  (S2 landed)
-grep -c '10000' README.md                          # expect 1  (the dwell-ms row only)
-grep -c 'Fallback for \*silent\* presence' README.md   # expect 1  (unique anchor)
-sed -n '84,88p' README.md > /tmp/region_before_m3t2s1.txt   # snapshot incl. neighbors
+# 0. Detect input state (run BEFORE editing) — IDEMPOTENT: see CURRENT-STATE note above.
+wc -l README.md                                          # expect 184 either way
+head_present=$(grep -c 'Fallback for \*silent\* presence' README.md)  # 1=State A, 0=State B
+new_present=$(grep -c 'the only way a walked-to session becomes a toggle target' README.md)  # 0=State A, 1=State B
+echo "State A (edit needed) if old=1,new=0; State B (already applied) if old=0,new=1"
+# State B -> SKIP the edit; the file already matches the newText. State A -> snapshot, then edit:
+if [ "$head_present" = "1" ]; then
+  grep -n 'Fallback for \*silent\* presence' README.md    # locate the row by TEXT
+  sed -n '/^\| `@session-history-pick-key`/,/^\| `@session-history-popup`/p' README.md > /tmp/region_before_m3t2s1.txt
+fi
 
 # 1. Line-count delta (capture before & after within THIS task):
-#    (edit happens here via the `edit` tool — single row oldText→newText replacement)
+#    (State A: edit happens here via the `edit` tool — single row oldText→newText replacement.
+#     State B: no edit; line count is already 184.)
 after=$(wc -l < README.md)
 echo "lines: 184 -> $after (expect 184, delta 0)"
 [ "$after" = "184" ] && echo "LINE COUNT OK" || echo "LINE COUNT WRONG"
-# Expected: LINE COUNT OK (184). The edit is one row in -> one row out = Δ0.
+# Expected: LINE COUNT OK (184). The edit (if any) is one row in -> one row out = Δ0.
 
 # 2. Table-row structure sanity — the row is still a well-formed 3-column row:
-sed -n '86p' README.md | awk -F'|' '{print NF}'
-# Expected: 5 (leading empty + trailing empty + 3 cells). A malformed row (e.g.
-# an unescaped `|` inside the description, or a missing leading/trailing `|`)
-# would give a different count — investigate.
+grep '@session-history-dwell-ms' README.md | head -1 | awk -F'|' '{print NF}'
+# Expected: 5 (leading empty + trailing empty + 3 cells). Text-anchored on the
+# dwell-ms row, not 'line 86'. A malformed row (e.g. an unescaped `|` inside the
+# description, or a missing leading/trailing `|`) would give a different count.
 
 # 3. Byte-level eyeball of the new row (em-dash, backticks, emphasis):
-sed -n '86p' README.md | cat -A
+grep '@session-history-dwell-ms' README.md | head -1 | cat -A
 # Expected: one line; `30000` (backticked); `*walked*`; one U+2014 em-dash
 # (shown by cat -A as M-bM-^@M-^T); `0` (backticked); NO curly quotes.
 
@@ -666,15 +706,24 @@ grep -c 'the only way a walked-to session becomes a toggle target besides re-sel
 grep -c '`0` disables dwell' README.md                        # Expected: 1
 grep -c '(toggle, pick, tmux-sessionx, or a manual switch)' README.md   # Expected: 1
 
-# D. Neighboring rows are byte-identical (boundary preservation):
-diff <(sed -n '84,85p' /tmp/region_before_m3t2s1.txt) <(sed -n '84,85p' README.md) && echo "ROWS ABOVE OK"
-# Expected: empty diff + "ROWS ABOVE OK" (pick-key + forward-key rows unchanged).
-diff <(sed -n '87,88p' /tmp/region_before_m3t2s1.txt) <(sed -n '87,88p' README.md) && echo "ROWS BELOW OK"
-# Expected: empty diff + "ROWS BELOW OK" (popup row + following blank unchanged).
+# D. Neighboring rows are byte-identical (boundary preservation) — State A uses the
+#    Task-1 snapshot; State B verifies neighbors directly (no snapshot taken):
+if [ -f /tmp/region_before_m3t2s1.txt ]; then
+  diff <(grep '@session-history-pick-key' /tmp/region_before_m3t2s1.txt | head -1) \
+       <(grep '@session-history-pick-key' README.md | head -1) && echo "ROW ABOVE OK"
+  diff <(grep '@session-history-popup' /tmp/region_before_m3t2s1.txt | head -1) \
+       <(grep '@session-history-popup' README.md | head -1) && echo "ROW BELOW OK"
+else
+  echo "State B (no snapshot) — neighbor presence check:"
+  grep -c '@session-history-pick-key' README.md   # Expected: 1
+  grep -c '@session-history-popup'   README.md   # Expected: 1
+fi
+# Expected (State A): empty diffs + "ROW ABOVE OK" + "ROW BELOW OK" (pick-key row
+#   above and popup row below unchanged). Expected (State B): each neighbor grep = 1.
 
-# E. Sibling regions are untouched:
-grep -c 'How activity detection works' README.md          # Expected: 0 (S2's deletion intact)
-sed -n '106,133p' README.md | grep -c 'select it directly'   # Expected: 1 (S1's bullets intact)
+# E. Sibling regions are untouched (text-anchored, not line 106-133):
+grep -c 'How activity detection works' README.md   # Expected: 0 (S2's deletion intact)
+grep -c 'select it directly' README.md             # Expected: 1 (S1's promotion bullet intact)
 # Troubleshooting still has the activity reference until T2.S2 lands — that is NOT this task:
 grep -c 'produce output in it while viewing it' README.md # Expected: 1 (T2.S2 hasn't landed; NOT in scope)
 ```
@@ -723,7 +772,7 @@ grep -c 'the only way a walked-to session becomes a toggle target' README.md  # 
 - [ ] All validation levels completed successfully.
 - [ ] Line count unchanged: `wc -l README.md` → **184**.
 - [ ] Default changed: `grep -c '`10000`' README.md` → **0**; `grep -c '`30000`' README.md` → **1**.
-- [ ] Row still well-formed: `sed -n '86p' README.md | awk -F'|' '{print NF}'` → **5**.
+- [ ] Row still well-formed: `grep '@session-history-dwell-ms' README.md | head -1 | awk -F'|' '{print NF}'` → **5**.
 - [ ] git diff is a single one-line hunk (1 insertion, 1 deletion).
 
 ### Feature Validation

@@ -4,7 +4,7 @@
       "type": "Phase",
       "id": "P1",
       "title": "Align Implementation to PRD Spec — Selection + Dwell Relevance Model",
-      "status": "Planned",
+      "status": "Researching",
       "description": "The PRD (PRD.md) is a reference spec describing the desired final state of the tmux-session-history engine. The current implementation has diverged: it ships a client_activity-polling activity-detection subsystem that the PRD explicitly removes (PRD §12: 'It is therefore not wired. Relevance comes from selection and dwell only.'). This phase is a simplification refactor: strip the activity-detection machinery (do_activity, do_poller, do_start_poller, the activity/poller subcommands, @session-history-poller-pid, @session-history-piped-pane), raise the dwell default from 10000 ms to 30000 ms (the coupled compensating change — once focused-activity is gone, dwell becomes the only silent-presence signal), and update all code comments and user-facing documentation to match. The reactive engine core (do_hook, do_dwell, do_toggle, do_back/forward, do_pick, prune_dead, cap_to_live) is already PRD-compliant and must NOT be modified. See plan/001_ca41c05f3ead/architecture/system_context.md for the full context.",
       "milestones": [
         {
@@ -205,7 +205,7 @@
           "type": "Milestone",
           "id": "P1.M3",
           "title": "Documentation Sync (README.md)",
-          "status": "Planned",
+          "status": "Researching",
           "description": "Rewrite the README to describe the PRD's selection+dwell-only relevance model: remove all activity-detection references, update the dwell default to 30000, and ensure internal consistency. Per §5 of the SOW, per-section doc updates ride with the work (Mode A), and a final changeset-level sweep task (Mode B) verifies cross-file consistency.",
           "tasks": [
             {
@@ -260,14 +260,14 @@
               "type": "Task",
               "id": "P1.M3.T2",
               "title": "Update README Options Table & Troubleshooting",
-              "status": "Researching",
+              "status": "Ready",
               "description": "Update the Options table dwell-ms row (default 30000, new description without activity references) and the Troubleshooting section (remove 'produce output' references).",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M3.T2.S1",
                   "title": "Update dwell-ms row in Options table",
-                  "status": "Complete",
+                  "status": "Ready",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T3.S1",
@@ -285,7 +285,7 @@
                   "type": "Subtask",
                   "id": "P1.M3.T2.S2",
                   "title": "Update Troubleshooting section to remove activity references",
-                  "status": "Researching",
+                  "status": "Complete",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1"
@@ -304,14 +304,14 @@
               "type": "Task",
               "id": "P1.M3.T3",
               "title": "Sync changeset-level documentation",
-              "status": "Planned",
+              "status": "Researching",
               "description": "Final changeset-level documentation sweep (Mode B per SOW §5). Verify that README.md, scripts/session_history.sh header comments, and session_history.tmux comments are all internally consistent with each other and with the PRD after all implementing subtasks are complete. This is the catch-all that prevents a coherent delta from shipping with stale cross-references.",
               "subtasks": [
                 {
                   "type": "Subtask",
                   "id": "P1.M3.T3.S1",
                   "title": "Verify cross-file documentation consistency (README ↔ code ↔ PRD)",
-                  "status": "Planned",
+                  "status": "Researching",
                   "story_points": 1,
                   "dependencies": [
                     "P1.M1.T1.S1",
