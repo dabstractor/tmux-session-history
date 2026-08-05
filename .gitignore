@@ -14,5 +14,13 @@ tmp/
 .env
 .env.*
 
+# Build artifacts
+dist/
+build/
+
+# Dependencies
+node_modules/
+venv/
+
 # Agent harness artifacts
 .pi-subagents/

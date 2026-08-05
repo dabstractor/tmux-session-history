@@ -3,7 +3,9 @@
 **Item**: Remove pipe-pane legacy cleanup and poller start; add stale-poller migration guard.
 **File under edit**: `scripts/session_history.sh` (one file, function `do_init` only).
 **Baseline state**: post-S1 (commit f070deb removed `do_activity`/`do_poller`/`do_start_poller`
-function BODIES). File is **564 lines**. S2 (case branches + Usage) is being implemented in
+function BODIES). File was **564 lines** at research start; S2 (case branches + Usage) landed
+mid-research → file is now **562 lines**. S2 does NOT touch `do_init`, so its line numbers are
+stable for this task (do_init stays at 491–521). S2 (case branches + Usage) is being implemented in
 parallel; S2 does NOT touch `do_init`, so its line numbers are stable for this task.
 
 ---
@@ -141,7 +143,9 @@ satisfying the OUTPUT spec. Do not re-order the seed logic.
 
 - Removed: lines 509–520 (pipe-pane block 509–515 + blank 516 + poller block 517–520) = **12 lines**.
 - Added: migration guard = **7 lines** (4-line comment + 3 code lines).
-- Net: **−5 lines**. File 564 → **559 lines**. `do_init` ends at ~line 516.
+- Net: **−5 lines**. File 564 → **559 lines** (post-S1 baseline) or 562 → **557 lines** (post-S2
+  baseline, observed during research). `do_init` ends at ~line 516. The PRP's Baseline Note handles
+  both starting counts; the edit mechanics are identical either way.
 
 ---
 
