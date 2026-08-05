@@ -1,0 +1,37 @@
+h1.0 tmux-session-history — Specification
+ h2.0 Table of contents
+ h2.1 1. Purpose & scope
+ h2.2 2. Concepts
+  h3.0 The timeline (history) — always on
+  h3.1 The relevance list — only when toggle is bound
+  h3.2 Key invariant
+ h2.3 3. State model
+  h3.3 Persistent state
+  h3.4 Configuration (user-facing)
+  h3.5 Internal flag
+ h2.4 4. Switch classification & the mode flag
+ h2.5 5. The reactive engine (do_hook)
+ h2.6 6. Relevance — what promotes and what doesn't
+ h2.7 7. Toggle
+  h3.6 Oscillation, precisely
+  h3.7 Self-healing
+ h2.8 8. Dwell
+  h3.8 Arming
+  h3.9 Firing
+  h3.10 Why dwell touches only the relevance list
+ h2.9 9. Gating
+ h2.10 10. Pruning & capping
+  h3.11 session-closed → prune_dead
+  h3.12 session-created → do_maintain
+ h2.11 11. Close-current behavior (the "4a" rule)
+ h2.12 12. Why there is no output-activity signal
+ h2.13 13. Concurrency & race safety
+ h2.14 14. Invariants & edge cases
+ h2.15 15. Configuration reference
+ h2.16 16. Hook & binding reference
+ h2.17 17. Subcommand reference
+ h2.18 18. Testing
+ h2.19 19. Known limitations
+ h2.20 20. File map
+---
+code:6 para:53 list:13 table:7
